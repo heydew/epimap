@@ -6,7 +6,7 @@ import pandas as pd
 REQUIRED_EPI_SIMPLE = {"date", "country", "cases", "recovered", "deaths"}
 REQUIRED_POP_SIMPLE = {"country", "population"}
 
-# ton epidemie.csv (OWID)
+# OWID (ton epidemie.csv)
 REQUIRED_EPI_OWID = {
     "Entity",
     "Day",
@@ -14,11 +14,36 @@ REQUIRED_EPI_OWID = {
     "Cumulative confirmed deaths",
 }
 
-# ton population.csv (World Bank)
+# World Bank (ton population.csv)
 REQUIRED_POP_WB = {"Country Name", "Year", "Value"}
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = PROJECT_ROOT / "data"
+
+# Mapping OWID -> World Bank (noms différents)
+OWID_TO_WB = {
+    "Bahamas": "Bahamas, The",
+    "Cape Verde": "Cabo Verde",
+    "Congo": "Congo, Rep.",
+    "Democratic Republic of Congo": "Congo, Dem. Rep.",
+    "East Timor": "Timor-Leste",
+    "Egypt": "Egypt, Arab Rep.",
+    "Gambia": "Gambia, The",
+    "Iran": "Iran, Islamic Rep.",
+    "Kyrgyzstan": "Kyrgyz Republic",
+    "Laos": "Lao PDR",
+    "Micronesia (country)": "Micronesia, Fed. Sts.",
+    "North Korea": "Korea, Dem. People's Rep.",
+    "South Korea": "Korea, Rep.",
+    "Palestine": "West Bank and Gaza",
+    "Russia": "Russian Federation",
+    "Slovakia": "Slovak Republic",
+    "Syria": "Syrian Arab Republic",
+    "Turkey": "Turkiye",
+    "Venezuela": "Venezuela, RB",
+    "Vietnam": "Viet Nam",
+    "Yemen": "Yemen, Rep.",
+}
 
 
 def load_epidemie(path: str | Path = DATA_DIR / "epidemie.csv") -> pd.DataFrame:
@@ -46,15 +71,15 @@ def load_epidemie(path: str | Path = DATA_DIR / "epidemie.csv") -> pd.DataFrame:
     if REQUIRED_EPI_OWID.issubset(cols):
         out = pd.DataFrame()
         out["country"] = df["Entity"].astype(str).str.strip()
+        out["country"] = out["country"].replace(OWID_TO_WB)  # <-- normalisation noms
         out["date"] = pd.to_datetime(df["Day"], errors="coerce")
         if out["date"].isna().any():
             raise ValueError("epidemie.csv (OWID): certaines dates sont invalides")
 
-        # IMPORTANT: ce sont des cumulés (pas des infectés actifs)
         out["cases"] = pd.to_numeric(df["Cumulative confirmed cases"], errors="coerce").fillna(0.0)
         out["deaths"] = pd.to_numeric(df["Cumulative confirmed deaths"], errors="coerce").fillna(0.0)
 
-        # pas présent dans OWID -> on met 0 pour ne pas casser ton pipeline
+        # pas présent dans OWID -> 0 (pour ne pas casser le pipeline)
         out["recovered"] = 0.0
 
         return out.sort_values(["country", "date"]).reset_index(drop=True)
@@ -97,11 +122,20 @@ def load_population(path: str | Path = DATA_DIR / "population.csv") -> pd.DataFr
     raise ValueError(f"population.csv: format inconnu. Colonnes trouvées: {list(df.columns)}")
 
 
-def merge_epi_pop(df_epi: pd.DataFrame, df_pop: pd.DataFrame) -> pd.DataFrame:
+def merge_epi_pop(df_epi: pd.DataFrame, df_pop: pd.DataFrame, drop_missing: bool = True) -> pd.DataFrame:
     data = df_epi.merge(df_pop, on="country", how="left")
+
     if data["population"].isna().any():
         missing = data.loc[data["population"].isna(), "country"].unique().tolist()
-        raise ValueError(f"population manquante pour: {missing}")
+
+        if drop_missing:
+            data = data.dropna(subset=["population"]).copy()
+            preview = missing[:25]
+            more = "" if len(missing) <= 25 else f" (+{len(missing)-25} autres)"
+            print(f"[WARN] Population manquante (lignes supprimées): {preview}{more}")
+        else:
+            raise ValueError(f"population manquante pour: {missing}")
+
     return data
 
 
@@ -110,7 +144,7 @@ def compute_sir_from_data(data: pd.DataFrame) -> pd.DataFrame:
     Avec OWID:
     - cases est cumulatif
     - recovered = 0
-    => S/I/R ici sert surtout à visualiser/pipeliner, pas "infectés actifs" réels.
+    => S/I/R ici sert surtout à visualiser/pipeliner.
     """
     data = data.copy()
     data["I"] = data["cases"]
