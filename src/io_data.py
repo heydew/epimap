@@ -1,10 +1,19 @@
 from __future__ import annotations
+from pathlib import Path
 import pandas as pd
 
 REQUIRED_EPI = {"date", "country", "cases", "recovered", "deaths"}
 REQUIRED_POP = {"country", "population"}
 
-def load_epidemie(path: str = "data/epidemie.csv") -> pd.DataFrame:
+# racine du projet = dossier parent de src/
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DATA_DIR = PROJECT_ROOT / "data"
+
+def load_epidemie(path: str | Path = DATA_DIR / "epidemie.csv") -> pd.DataFrame:
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(f"Fichier introuvable: {path}")
+
     df = pd.read_csv(path)
     missing = REQUIRED_EPI - set(df.columns)
     if missing:
@@ -20,7 +29,11 @@ def load_epidemie(path: str = "data/epidemie.csv") -> pd.DataFrame:
 
     return df.sort_values(["country", "date"]).reset_index(drop=True)
 
-def load_population(path: str = "data/population.csv") -> pd.DataFrame:
+def load_population(path: str | Path = DATA_DIR / "population.csv") -> pd.DataFrame:
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(f"Fichier introuvable: {path}")
+
     df = pd.read_csv(path)
     missing = REQUIRED_POP - set(df.columns)
     if missing:
@@ -41,12 +54,8 @@ def merge_epi_pop(df_epi: pd.DataFrame, df_pop: pd.DataFrame) -> pd.DataFrame:
     return data
 
 def compute_sir_from_data(data: pd.DataFrame) -> pd.DataFrame:
-    # I = cases (infectés actifs)
     data = data.copy()
     data["I"] = data["cases"]
-    # R = recovered + deaths
     data["R"] = data["recovered"] + data["deaths"]
-    # S = population - I - R
-    data["S"] = data["population"] - data["I"] - data["R"]
-    data["S"] = data["S"].clip(lower=0)
+    data["S"] = (data["population"] - data["I"] - data["R"]).clip(lower=0)
     return data
