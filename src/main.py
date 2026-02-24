@@ -22,7 +22,7 @@ def latest_snapshot_for_map(data_sir: pd.DataFrame) -> pd.DataFrame:
 def main():
     df_epi = load_epidemie()
     df_pop = load_population()
-    data = merge_epi_pop(df_epi, df_pop)
+    data = merge_epi_pop(df_epi, df_pop, drop_missing=True)
     data_sir = compute_sir_from_data(data)
 
     print("=== Aperçu SIR calculé depuis les CSV ===")
