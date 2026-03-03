@@ -33,10 +33,13 @@ def choropleth_world(
     m = folium.Map(location=[20, 0], zoom_start=2, tiles="cartodbpositron")
 
     folium.Choropleth(
-        geo_data=geo_data,          # <-- on passe l'objet JSON (pas le chemin)
+        geo_data=geo_data,
         data=df_values,
         columns=["country", "value"],
         key_on=key_on,
+        fill_color="YlOrRd",  # 👈 ADD THIS
+        nan_fill_color="white",  # 👈 unmatched = white, not black
+        nan_fill_opacity=0.4,  # 👈 subtle, not jarring
         fill_opacity=0.8,
         line_opacity=0.2,
         legend_name=legend_name,
