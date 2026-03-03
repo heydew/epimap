@@ -43,6 +43,17 @@ OWID_TO_WB = {
     "Venezuela": "Venezuela, RB",
     "Vietnam": "Viet Nam",
     "Yemen": "Yemen, Rep.",
+    "United States": "United States of America",
+    "Czechia": "Czech Republic",
+    "North Macedonia": "Macedonia",
+    "Eswatini": "Swaziland",
+    "Tanzania": "United Republic of Tanzania",
+    "Serbia": "Republic of Serbia",
+    "Cote d'Ivoire": "Ivory Coast",
+    "Guinea-Bissau": "Guinea Bissau",
+    "Timor": "East Timor",
+    "Trinidad and Tobago": "Trinidad and Tobago",
+
 }
 
 
@@ -71,7 +82,7 @@ def load_epidemie(path: str | Path = DATA_DIR / "epidemie.csv") -> pd.DataFrame:
     if REQUIRED_EPI_OWID.issubset(cols):
         out = pd.DataFrame()
         out["country"] = df["Entity"].astype(str).str.strip()
-        out["country"] = out["country"].replace(OWID_TO_WB)  # <-- normalisation noms
+        out["country"] = out["country"].replace(OWID_TO_WB, regex=False)#-- normalisation noms
         out["date"] = pd.to_datetime(df["Day"], errors="coerce")
         if out["date"].isna().any():
             raise ValueError("epidemie.csv (OWID): certaines dates sont invalides")
