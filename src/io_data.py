@@ -20,41 +20,87 @@ REQUIRED_POP_WB = {"Country Name", "Year", "Value"}
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = PROJECT_ROOT / "data"
 
-# Mapping OWID -> World Bank (noms différents)
-OWID_TO_WB = {
-    "Bahamas": "Bahamas, The",
+# Mapping OWID -> GeoJSON (les noms exacts du GeoJSON)
+OWID_TO_GEOJSON = {
+    "Antigua and Barbuda": "Antigua and Barb.",
+    "Bosnia and Herzegovina": "Bosnia and Herz.",
+    "Bonaire Sint Eustatius and Saba": "Bonaire Sint Eustatius and Saba",
+    "British Virgin Islands": "British Virgin Is.",
+    "Cabo Verde": "Cabo Verde",
     "Cape Verde": "Cabo Verde",
-    "Congo": "Congo, Rep.",
-    "Democratic Republic of Congo": "Congo, Dem. Rep.",
+    "Cayman Islands": "Cayman Is.",
+    "Central African Republic": "Central African Rep.",
+    "Cook Islands": "Cook Is.",
+    "Curacao": "Curaçao",
+    "Czechia": "Czechia",
+    "Democratic Republic of Congo": "Dem. Rep. Congo",
+    "Dominican Republic": "Dominican Rep.",
     "East Timor": "Timor-Leste",
-    "Egypt": "Egypt, Arab Rep.",
-    "Gambia": "Gambia, The",
-    "Iran": "Iran, Islamic Rep.",
-    "Kyrgyzstan": "Kyrgyz Republic",
-    "Laos": "Lao PDR",
-    "Micronesia (country)": "Micronesia, Fed. Sts.",
-    "North Korea": "Korea, Dem. People's Rep.",
-    "South Korea": "Korea, Rep.",
-    "Palestine": "West Bank and Gaza",
-    "Russia": "Russian Federation",
-    "Slovakia": "Slovak Republic",
-    "Syria": "Syrian Arab Republic",
-    "Turkey": "Turkiye",
-    "Venezuela": "Venezuela, RB",
-    "Vietnam": "Viet Nam",
-    "Yemen": "Yemen, Rep.",
+    "Equatorial Guinea": "Eq. Guinea",
+    "Eswatini": "eSwatini",
+    "Falkland Islands": "Falkland Is.",
+    "Faroe Islands": "Faeroe Is.",
+    "French Guiana": "French Guiana",
+    "French Polynesia": "Fr. Polynesia",
+    "Guadeloupe": "Guadeloupe",
+    "Marshall Islands": "Marshall Is.",
+    "Martinique": "Martinique",
+    "Mayotte": "Mayotte",
+    "Micronesia (country)": "Micronesia",
+    "Northern Mariana Islands": "N. Mariana Is.",
+    "Pitcairn": "Pitcairn Is.",
+    "Reunion": "Réunion",
+    "Saint Barthelemy": "St-Barthélemy",
+    "Saint Kitts and Nevis": "St. Kitts and Nevis",
+    "Saint Lucy": "Saint Lucia",
+    "Saint Martin (French part)": "St-Martin",
+    "Saint Pierre and Miquelon": "St. Pierre and Miquelon",
+    "Saint Vincent and the Grenadines": "St. Vin. and Gren.",
+    "Sao Tome and Principe": "São Tomé and Principe",
+    "Sint Maarten (Dutch part)": "Sint Maarten",
+    "Solomon Islands": "Solomon Is.",
+    "South Sudan": "S. Sudan",
+    "Timor": "Timor-Leste",
+    "Tokelau": "Tokelau",
+    "Turks and Caicos Islands": "Turks and Caicos Is.",
     "United States": "United States of America",
-    "Czechia": "Czech Republic",
-    "North Macedonia": "Macedonia",
-    "Eswatini": "Swaziland",
-    "Tanzania": "United Republic of Tanzania",
-    "Serbia": "Republic of Serbia",
-    "Cote d'Ivoire": "Ivory Coast",
-    "Guinea-Bissau": "Guinea Bissau",
-    "Timor": "East Timor",
+    "United States Virgin Islands": "U.S. Virgin Is.",
+    "Wallis and Futuna": "Wallis and Futuna Is.",
+    "Iran": "Iran",
+    "Iraq": "Iraq",
+    "Kyrgyzstan": "Kyrgyzstan",
+    "Laos": "Laos",
+    "Macao": "Macao",
+    "Myanmar": "Myanmar",
+    "North Korea": "North Korea",
+    "North Macedonia": "North Macedonia",
+    "Palau": "Palau",
+    "Palestine": "Palestine",
+    "Papua New Guinea": "Papua New Guinea",
+    "Philippines": "Philippines",
+    "Russia": "Russia",
+    "Serbia": "Serbia",
+    "Slovakia": "Slovakia",
+    "South Korea": "South Korea",
+    "Syria": "Syria",
+    "Taiwan": "Taiwan",
+    "Tanzania": "Tanzania",
     "Trinidad and Tobago": "Trinidad and Tobago",
-
+    "Turkey": "Turkey",
+    "Uruguay": "Uruguay",
+    "Uzbekistan": "Uzbekistan",
+    "Venezuela": "Venezuela",
+    "Vietnam": "Vietnam",
+    "Yemen": "Yemen",
+    "Zambia": "Zambia",
+    "Zimbabwe": "Zimbabwe",
 }
+from difflib import get_close_matches
+
+def fuzzy_match_country(country: str, geo_names: list[str], cutoff: float = 0.6) -> str:
+    """Try to fuzzy match a country name to GeoJSON names if exact match fails"""
+    matches = get_close_matches(country, geo_names, n=1, cutoff=cutoff)
+    return matches[0] if matches else country
 
 
 def load_epidemie(path: str | Path = DATA_DIR / "epidemie.csv") -> pd.DataFrame:
@@ -65,24 +111,42 @@ def load_epidemie(path: str | Path = DATA_DIR / "epidemie.csv") -> pd.DataFrame:
     df = pd.read_csv(path)
     cols = set(df.columns)
 
-    # --- Cas A: format "simple" ---
-    if REQUIRED_EPI_SIMPLE.issubset(cols):
-        out = df.copy()
-        out["date"] = pd.to_datetime(out["date"], errors="coerce")
-        if out["date"].isna().any():
-            raise ValueError("epidemie.csv: certaines dates sont invalides")
+    if REQUIRED_EPI_OWID.issubset(cols):
+        # Load GeoJSON to get valid country names
+        import json
+        geo_path = Path(DATA_DIR / "world_countries.geojson")
+        with open(geo_path, encoding='utf-8') as f:
+            geo = json.load(f)
+        geo_names = [f['properties'].get('name') for f in geo['features']]
 
-        out["country"] = out["country"].astype(str).str.strip()
-        for c in ["cases", "recovered", "deaths"]:
-            out[c] = pd.to_numeric(out[c], errors="coerce").fillna(0.0)
+        out = pd.DataFrame()
+        out["country"] = df["Entity"].astype(str).str.strip()
+
+        # Apply mapping
+        out["country"] = out["country"].replace(OWID_TO_GEOJSON, regex=False)
+
+        # Fuzzy match anything still not in GeoJSON
+        out["country"] = out["country"].apply(
+            lambda x: fuzzy_match_country(x, geo_names) if x not in geo_names else x
+        )
+
+        out["date"] = pd.to_datetime(df["Day"], errors="coerce")
+        if out["date"].isna().any():
+            raise ValueError("epidemie.csv (OWID): certaines dates sont invalides")
+
+        out["cases"] = pd.to_numeric(df["Cumulative confirmed cases"], errors="coerce").fillna(0.0)
+        out["deaths"] = pd.to_numeric(df["Cumulative confirmed deaths"], errors="coerce").fillna(0.0)
+        out["recovered"] = 0.0
 
         return out.sort_values(["country", "date"]).reset_index(drop=True)
+
+    raise ValueError(f"epidemie.csv: format inconnu. Colonnes trouvées: {list(df.columns)}")
 
     # --- Cas B: OWID (celui que tu as) ---
     if REQUIRED_EPI_OWID.issubset(cols):
         out = pd.DataFrame()
         out["country"] = df["Entity"].astype(str).str.strip()
-        out["country"] = out["country"].replace(OWID_TO_WB, regex=False)#-- normalisation noms
+        out["country"] = out["country"].replace(OWID_TO_GEOJSON, regex=False)#-- normalisation noms pour GeoJSON
         out["date"] = pd.to_datetime(df["Day"], errors="coerce")
         if out["date"].isna().any():
             raise ValueError("epidemie.csv (OWID): certaines dates sont invalides")
