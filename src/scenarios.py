@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from .model import SIRParams, SIRState
+from model import SIRParams, SIRState
 
 @dataclass
 class Scenario:
