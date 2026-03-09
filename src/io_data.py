@@ -61,6 +61,22 @@ def load_population(path=None, codes_valides=None):
     df = df.dropna(subset=["population"])
     df = df[ df["population"] > 0 ]
 
+    rename_pays = {
+        "Russian Federation":  "Russia",
+        "Turkiye":             "Turkey",
+        "Egypt, Arab Rep.":    "Egypt",
+        "Iran, Islamic Rep.":  "Iran",
+        "Viet Nam":            "Vietnam",
+        "Lao PDR":             "Laos",
+        "Yemen, Rep.":         "Yemen",
+        "Venezuela, RB":       "Venezuela",
+        "Slovak Republic":     "Slovakia",
+        "Congo, Dem. Rep.": "Democratic Republic of Congo",
+        "Congo, Rep.": "Congo"
+    }
+    df["country"] = df["country"].replace(rename_pays)
+
+
     # filtrer sur les codes connus de epidemie.csv
     # ca vire les agregats regionaux banque mondiale (Arab World, EUU, WLD...)
     if codes_valides is not None and "code" in df.columns:
