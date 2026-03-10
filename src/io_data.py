@@ -2,131 +2,68 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 
-
-DATA_DIR = Path(__file__).resolve().parents[1] / "data"
-
-
-def load_epidemie(path=None):
-
-    if path is None:
-        path = DATA_DIR / "epidemie.csv"
-
-    df = pd.read_csv(path)
-
-    # renommer les colonnes owid
-    rename = {"Entity": "country", "Code": "code", "Day": "date"}
-    for col in df.columns:
-        if "death" in col.lower() and "cumulative" in col.lower():
-            rename[col] = "cum_deaths"
-        if "cases" in col.lower() and "cumulative" in col.lower():
-            rename[col] = "cum_cases"
-    df = df.rename(columns=rename)
-
-    df["date"]       = pd.to_datetime(df["date"], errors="coerce")
-    df["cum_cases"]  = pd.to_numeric(df["cum_cases"],  errors="coerce").fillna(0)
-    df["cum_deaths"] = pd.to_numeric(df["cum_deaths"], errors="coerce").fillna(0)
-    df["country"]    = df["country"].astype(str).str.strip()
-
-    # virer les lignes sans code iso (agregats "World", "Africa", etc.)
-    df = df[ df["code"].notna() & (df["code"].astype(str).str.strip() != "") ]
-    df = df.dropna(subset=["date"])
-
-    return df.sort_values(["country", "date"]).reset_index(drop=True)
+#remonte le dossier de un pour avoir les datas
+BASE = Path(__file__).resolve().parents[1] / "data"
 
 
-def load_population(path=None, codes_valides=None):
-    """
-    codes_valides : set de codes ISO3 venant de epidemie.csv
-                    si fourni, ca vire automatiquement les agregats regionaux
-                    de la banque mondiale (WLD, EUU, etc.) qui sinon font
-                    gonfler la population mondiale
-    """
+def get_epi(p=None):
+    p = p or (BASE / "epidemie.csv")
+    df = pd.read_csv(p)
 
-    if path is None:
-        path = DATA_DIR / "population.csv"
-
-    df = pd.read_csv(path)
-
-    rename = {}
-    for col in df.columns:
-        c = col.lower().strip()
-        if c == "country name":   rename[col] = "country"
-        if c == "country code":   rename[col] = "code"
-        if c == "year":           rename[col] = "year"
-        if c == "value":          rename[col] = "population"
-    df = df.rename(columns=rename)
-
-    df["country"]    = df["country"].astype(str).str.strip()
-    df["population"] = pd.to_numeric(df["population"], errors="coerce")
-    df = df.dropna(subset=["population"])
-    df = df[ df["population"] > 0 ]
-
-    rename_pays = {
-        "Russian Federation":  "Russia",
-        "Turkiye":             "Turkey",
-        "Egypt, Arab Rep.":    "Egypt",
-        "Iran, Islamic Rep.":  "Iran",
-        "Viet Nam":            "Vietnam",
-        "Lao PDR":             "Laos",
-        "Yemen, Rep.":         "Yemen",
-        "Venezuela, RB":       "Venezuela",
-        "Slovak Republic":     "Slovakia",
-        "Congo, Dem. Rep.": "Democratic Republic of Congo",
-        "Congo, Rep.": "Congo"
+ # clean des noms de colonnes du csv qui sont chiant
+    cols = {
+        "Entity": "country", "Code": "code", "Day": "date"
     }
-    df["country"] = df["country"].replace(rename_pays)
+    for c in df.columns:
+        low = c.lower()
+        if "death" in low and "cumulative" in low: cols[c] = "cum_deaths"
+        if "cases" in low and "cumulative" in low: cols[c] = "cum_cases"
+
+    df = df.rename(columns=cols)
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+
+ # enleve les lignes vides
+    df = df[df["code"].notna() & (df["code"] != "")]
+    return df.sort_values(["country", "date"]).fillna(0)
 
 
-    # filtrer sur les codes connus de epidemie.csv
-    # ca vire les agregats regionaux banque mondiale (Arab World, EUU, WLD...)
-    if codes_valides is not None and "code" in df.columns:
-        df = df[ df["code"].isin(codes_valides) ]
+def get_pop(p=None, codes=None):
+    p = p or (BASE / "population.csv")
+    df = pd.read_csv(p)
 
-    # garder juste la pop la plus recente par pays
-    if "year" in df.columns:
-        df["year"] = pd.to_numeric(df["year"], errors="coerce")
-        df = df.sort_values("year").groupby("country").last().reset_index()
+# Map
+    df.columns = [c.lower().strip() for c in df.columns]
+    df = df.rename(columns={"country name": "country", "country code": "code", "value": "pop"})
 
-    return df[["country", "population"]]
+# On garde que les pays qu'on a dans le fichier épidémie
+    if codes:
+        df = df[df["code"].isin(codes)]
 
-
-def merge_epi_pop(df_epi, df_pop):
-
-    data = df_epi.merge(df_pop, on="country", how="left")
-    data = data.dropna(subset=["population"])
-
-    return data.reset_index(drop=True)
+#prend juste la ligne la plus récente
+    df = df.sort_values("year").groupby("country").last().reset_index()
+    return df[["country", "pop"]]
 
 
-def compute_sir(data, gamma=0.1):
+def run_sir(df, g=0.1):
+    res = []
+    for c, g_df in df.groupby("country"):
+        g_df = g_df.sort_values("date").copy()
+        n = float(g_df["population"].iloc[0])
 
-    frames = []
+        c_cases = g_df["cum_cases"].values
+ # Diff pour avoir les nouveaux par jour
+        new = np.diff(c_cases, prepend=c_cases[0])
+        new[new < 0] = 0
 
-    for country, grp in data.groupby("country"):
+        i, r = np.zeros(len(g_df)), np.zeros(len(g_df))
+        i[0], r[0] = c_cases[0], g_df["cum_deaths"].iloc[0]
 
-        grp = grp.sort_values("date").copy()
-        N   = float(grp["population"].iloc[0])
+        for k in range(1, len(g_df)):
+            recov = g * i[k - 1]
+            i[k] = max(0, i[k - 1] + new[k] - recov)
+            r[k] = min(r[k - 1] + recov, n - i[k])
 
-        cum_cases  = grp["cum_cases"].values.astype(float)
-        cum_deaths = grp["cum_deaths"].values.astype(float)
-        new_cases  = np.maximum(0, np.diff(cum_cases, prepend=cum_cases[0]))
-
-        I = np.zeros(len(grp))
-        R = np.zeros(len(grp))
-
-        for k in range(len(grp)):
-            if k == 0:
-                I[0] = cum_cases[0]
-                R[0] = cum_deaths[0]
-            else:
-                recovered = gamma * I[k-1]
-                I[k] = max(0, I[k-1] + new_cases[k] - recovered)
-                R[k] = min(R[k-1] + recovered + (cum_deaths[k] - cum_deaths[k-1]),
-                           N - I[k])
-
-        grp["I"] = I
-        grp["R"] = R
-        grp["S"] = np.maximum(0, N - I - R)
-        frames.append(grp)
-
-    return pd.concat(frames).reset_index(drop=True)
+        g_df["I"], g_df["R"] = i, r
+        g_df["S"] = n - i - r
+        res.append(g_df)
+    return pd.concat(res)
