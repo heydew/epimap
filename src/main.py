@@ -7,7 +7,7 @@ from viz_curves import plot_sir_animated, out as ouvre_graphique
 from viz_map    import choropleth_timelapse, out as ouvre_carte
 
 
-OUT_DIR      = Path(__file__).resolve().parents[1] / "out"
+OUT_DIR = Path(__file__).resolve().parents[1] / "out"
 GEOJSON_PATH = Path(__file__).resolve().parents[1] / "data" / "world-countries.geojson"
 OUT_DIR.mkdir(exist_ok=True)
 
@@ -31,24 +31,24 @@ if __name__ == "__main__":
     codes_valides = set(df_epi["code"].dropna().unique())
     df_pop = load_population(codes_valides=codes_valides)
 
-    data     = merge_epi_pop(df_epi, df_pop)
+    data = merge_epi_pop(df_epi, df_pop)
     data_sir = compute_sir(data)
 
-    world    = monde(data_sir)
+    world = monde(data_sir)
     date_min = world["date"].min().date()
     date_max = world["date"].max().date()
-    n_pays   = data_sir["country"].nunique()
-    pop_G    = world["population"].iloc[0] / 1e9
+    n_pays = data_sir["country"].nunique()
+    pop_G = world["population"].iloc[0] / 1e9
 
-    print(f"C'est parti les mecs, données COVID chargées ({date_min} -> {date_max})")
-    print(f"{n_pays} pays, population mondiale ~{pop_G:.1f}G")
-    print(f"pic infectés : {world['I'].max():,.0f}  ({world.loc[world['I'].idxmax(), 'date'].date()})")
-    print("génération des fichiers...")
+    print(f"C'est parti les mecs, données COVID chargées ({date_min} au {date_max})")
+    print(f"Il y a {n_pays} pays au total et la population mondiale {pop_G:.1f} milliard")
+    print(f"Le pic d'infectés est d'environ {world['I'].max():,.0f} à cette date: {world.loc[world['I'].idxmax(), 'date'].date()}")
+    print("jsuis le meilleur")
 
-    path_sir   = str(OUT_DIR / "sir_monde.html")
+    path_sir = str(OUT_DIR / "sir_monde.html")
     path_carte = str(OUT_DIR / "carte_timelapse.html")
 
-    plot_sir_animated(world, f"COVID-19 monde ({date_min} -> {date_max})", path_sir)
+    plot_sir_animated(world, f"GRAPHIQUE SIR COVID {date_min} à {date_max}", path_sir)
 
     import json
 
@@ -57,18 +57,6 @@ if __name__ == "__main__":
 
     noms_geojson = set(f["properties"]["name"] for f in geo["features"])
     noms_csv = set(data_sir["country"].apply(lambda x: COUNTRY_NAME_MAP.get(x, x)))
-
-    for p in ["congo"]:
-        match = df_epi[df_epi["country"].str.lower().str.contains(p)]
-        print(match["country"].unique())
-
-
-
-
-
-
-
-
     choropleth_timelapse(data_sir, str(GEOJSON_PATH), path_carte)
 
     print("ouverture dans le navigateur:")

@@ -7,9 +7,8 @@ def plot_sir_animated(data, title, out_html):
 
     data   = data.sort_values("date").reset_index(drop=True)
     dates  = [str(d)[:10] for d in data["date"]]
-    S      = [round(float(v)) for v in data["S"]]
-    I      = [round(float(v)) for v in data["I"]]
-    R      = [round(float(v)) for v in data["R"]]
+    I_raw  = data["I"].rolling(window=10, min_periods=1, center=True).mean()
+    I      = [round(float(v)) for v in I_raw]
 
     html = """<!DOCTYPE html>
 <html>
@@ -95,18 +94,26 @@ def plot_sir_animated(data, title, out_html):
 <script>
 
 var DATES = """ + json.dumps(dates) + """;
-var S     = """ + json.dumps(S) + """;
 var I     = """ + json.dumps(I) + """;
-var R     = """ + json.dumps(R) + """;
+
+var peakI   = Math.max(...I);
+var peakIdx = I.indexOf(peakI);
 
 var chart = new Chart(document.getElementById('c').getContext('2d'), {
     type: 'line',
     data: {
         labels: [],
         datasets: [
-            {label:'S susceptibles', data:[], borderColor:'#4a90d9', borderWidth:2, pointRadius:0, tension:0.1, fill:false},
-            {label:'I infectes',     data:[], borderColor:'#c0392b', borderWidth:2, pointRadius:0, tension:0.1, fill:false},
-            {label:'R retires',      data:[], borderColor:'#27ae60', borderWidth:2, pointRadius:0, tension:0.1, fill:false}
+            {
+                label: 'I infectes',
+                data: [],
+                borderColor: '#c0392b',
+                borderWidth: 2,
+                pointRadius: 0,
+                tension: 0.1,
+                fill: true,
+                backgroundColor: 'rgba(192,57,43,0.08)'
+            }
         ]
     },
     options: {
@@ -135,34 +142,61 @@ var chart = new Chart(document.getElementById('c').getContext('2d'), {
             legend: {labels: {font:{family:'Courier New', size:12}, boxWidth:18}},
             tooltip: {callbacks: {label: function(c) {
                 return c.dataset.label + ': ' + Math.round(c.parsed.y).toLocaleString();
-            }}}
+            }}},
+            annotation: {}
         }
-    }
+    },
+    plugins: [{
+        id: 'peak-line',
+        afterDraw: function(chart) {
+            var ctx = chart.ctx;
+            var currentLen = chart.data.labels.length;
+            if (currentLen <= peakIdx) return;
+
+            var meta = chart.getDatasetMeta(0);
+            if (!meta.data[peakIdx]) return;
+
+            var x = meta.data[peakIdx].x;
+            var topY = chart.chartArea.top;
+            var botY = chart.chartArea.bottom;
+
+            ctx.save();
+            ctx.setLineDash([4, 4]);
+            ctx.strokeStyle = 'rgba(192,57,43,0.45)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(x, topY);
+            ctx.lineTo(x, botY);
+            ctx.stroke();
+
+            ctx.setLineDash([]);
+            ctx.fillStyle = '#c0392b';
+            ctx.font = '11px Courier New';
+            ctx.fillText('pic: ' + Math.round(peakI).toLocaleString(), x + 5, topY + 14);
+            ctx.restore();
+        }
+    }]
 });
 
 
 function afficher(idx) {
     chart.data.labels           = DATES.slice(0, idx+1);
-    chart.data.datasets[0].data = S.slice(0, idx+1);
-    chart.data.datasets[1].data = I.slice(0, idx+1);
-    chart.data.datasets[2].data = R.slice(0, idx+1);
+    chart.data.datasets[0].data = I.slice(0, idx+1);
     chart.update('none');
 
     document.getElementById('slider').value = idx;
     document.getElementById('infos').textContent =
-        DATES[idx] + '   S:' + S[idx].toLocaleString() +
-        '  I:' + I[idx].toLocaleString() +
-        '  R:' + R[idx].toLocaleString();
+        DATES[idx] + '   I infectes: ' + I[idx].toLocaleString();
 }
 
 
-var idx     = 0;
+var idx      = 0;
 var en_cours = false;
-var timer   = null;
+var timer    = null;
 
-var slider   = document.getElementById('slider');
-var btn      = document.getElementById('playpause');
-var vitesse  = document.getElementById('vitesse');
+var slider  = document.getElementById('slider');
+var btn     = document.getElementById('playpause');
+var vitesse = document.getElementById('vitesse');
 
 slider.max = DATES.length - 1;
 afficher(0);
