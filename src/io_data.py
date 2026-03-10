@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 
-#remonte le dossier de un pour avoir les datas
+# remonte le dossier de un pour avoir les datas
 BASE = Path(__file__).resolve().parents[1] / "data"
 
 
@@ -10,7 +10,7 @@ def get_epi(p=None):
     p = p or (BASE / "epidemie.csv")
     df = pd.read_csv(p)
 
- # clean des noms de colonnes du csv qui sont chiant
+    # clean des noms de colonnes du csv qui sont chiant
     cols = {
         "Entity": "country", "Code": "code", "Day": "date"
     }
@@ -22,7 +22,7 @@ def get_epi(p=None):
     df = df.rename(columns=cols)
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
 
- # enleve les lignes vides
+    # enleve les lignes vides et les agrégats régionaux (pas de code ISO)
     df = df[df["code"].notna() & (df["code"] != "")]
     return df.sort_values(["country", "date"]).fillna(0)
 
@@ -31,17 +31,17 @@ def get_pop(p=None, codes=None):
     p = p or (BASE / "population.csv")
     df = pd.read_csv(p)
 
-# Map
+    # normalise les colonnes (World Bank style)
     df.columns = [c.lower().strip() for c in df.columns]
-    df = df.rename(columns={"country name": "country", "country code": "code", "value": "pop"})
+    df = df.rename(columns={"country code": "code", "value": "pop"})
 
-# On garde que les pays qu'on a dans le fichier épidémie
+    # On garde que les pays qu'on a dans le fichier épidémie
     if codes:
         df = df[df["code"].isin(codes)]
 
-#prend juste la ligne la plus récente
-    df = df.sort_values("year").groupby("country").last().reset_index()
-    return df[["country", "pop"]]
+    # prend juste la ligne la plus récente
+    df = df.sort_values("year").groupby("code").last().reset_index()
+    return df[["code", "pop"]]  # NOTE: merge sur 'code', plus sur 'country'
 
 
 def run_sir(df, g=0.1):
@@ -51,7 +51,7 @@ def run_sir(df, g=0.1):
         n = float(g_df["population"].iloc[0])
 
         c_cases = g_df["cum_cases"].values
- # Diff pour avoir les nouveaux par jour
+        # Diff pour avoir les nouveaux par jour
         new = np.diff(c_cases, prepend=c_cases[0])
         new[new < 0] = 0
 
