@@ -3,12 +3,16 @@ import pandas as pd
 from pathlib import Path
 import webbrowser
 
-# Faut mettre les noms de pays qui marche pas (jfais bientot) les noms sont pas pareil dans Geojson et dans le csv
+# C'est les pays qui marchaient pas yen manque encore et ca marche toujours pas, faut debug jsp comment
 MAP_PAYS = {
     "United States": "United States of America",
-    "Russia": "Russia",
-    "Congo": "Republic of the Congo",
-    "Tanzania": "United Republic of Tanzania"
+    "USA": "United States of America",
+    "US":  "United States of America",
+    "Congo":  "Republic of the Congo",
+    "Democratic Republic of Congo":  "Democratic Republic of the Congo",
+    "Czechia": "Czech Republic",
+    "Cote d'Ivoire": "Ivory Coast",
+
 }
 
 
