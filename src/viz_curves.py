@@ -17,78 +17,23 @@ def plot_sir_animated(data, title, out_html):
 <title>""" + title + """</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
-    body {
-        margin: 0;
-        padding: 20px 30px;
-        font-family: 'Courier New', monospace;
-        background: #f5f2eb;
-    }
-
-    h2 {
-        font-size: 15px;
-        font-weight: normal;
-        color: #444;
-        border-bottom: 1px solid #ccc;
-        padding-bottom: 6px;
-        margin-bottom: 16px;
-    }
-
-    #wrap {
-        background: white;
-        border: 1px solid #bbb;
-        padding: 16px;
-        max-width: 900px;
-    }
-
-    #controls {
-        max-width: 900px;
-        margin-top: 10px;
-        display: flex; flex-direction: column; gap: 7px;
-    }
-
-    #infos { font-size: 12px; color: #666; }
-
-    #row {
-        display: flex; align-items: center; gap: 10px;
-    }
-
-    input[type=range] { flex: 1; accent-color: #555; cursor: pointer; }
-
-    button {
-        font-family: 'Courier New', monospace;
-        font-size: 12px;
-        background: white; border: 1px solid #888;
-        padding: 4px 12px; cursor: pointer;
-    }
-    button:hover { background: #ebebeb; }
-
-    select {
-        font-family: 'Courier New', monospace;
-        font-size: 12px; border: 1px solid #888;
-        background: white; padding: 3px 6px; cursor: pointer;
-    }
+    body { margin: 20px; font-family: monospace; background: white; }
+    #controls { margin-top: 8px; display: flex; align-items: center; gap: 8px; }
+    input[type=range] { flex: 1; }
 </style>
 </head>
 <body>
 
-<h2>""" + title + """</h2>
-
-<div id="wrap">
-    <canvas id="c"></canvas>
-</div>
-
+<p id="infos">--</p>
+<canvas id="c"></canvas>
 <div id="controls">
-    <div id="infos">--</div>
-    <div id="row">
-        <button id="restart">|&lt;</button>
-        <button id="playpause">&gt; play</button>
-        <input type="range" id="slider" min="0" value="0">
-        <select id="vitesse">
-            <option value="80">lent</option>
-            <option value="25" selected>normal</option>
-            <option value="6">rapide</option>
-        </select>
-    </div>
+    <button id="playpause">play</button>
+    <input type="range" id="slider" min="0" value="0">
+    <select id="vitesse">
+        <option value="80">lent</option>
+        <option value="25" selected>normal</option>
+        <option value="6">rapide</option>
+    </select>
 </div>
 
 <script>
@@ -205,13 +150,13 @@ afficher(0);
 function stop() {
     en_cours = false;
     clearInterval(timer); timer = null;
-    btn.textContent = '> play';
+    btn.textContent = 'play';
 }
 
 function play() {
     if (idx >= DATES.length - 1) idx = 0;
     en_cours = true;
-    btn.textContent = '|| pause';
+    btn.textContent = 'pause';
     timer = setInterval(function() {
         idx++;
         afficher(idx);
@@ -221,10 +166,6 @@ function play() {
 
 
 btn.addEventListener('click', function() { en_cours ? stop() : play(); });
-
-document.getElementById('restart').addEventListener('click', function() {
-    stop(); idx = 0; afficher(0);
-});
 
 slider.addEventListener('input', function() {
     stop(); idx = parseInt(slider.value); afficher(idx);

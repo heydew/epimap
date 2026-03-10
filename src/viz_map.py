@@ -109,57 +109,22 @@ def choropleth_timelapse(
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Courier New', monospace; background: #f5f2eb; }
-    #map { width: 100vw; height: calc(100vh - 90px); }
-
+    body { font-family: monospace; }
+    #map { width: 100vw; height: calc(100vh - 44px); }
     #controls {
-        position: fixed; bottom: 0; left: 0; right: 0; height: 90px;
-        background: #f5f2eb;
-        border-top: 1px solid #bbb;
-        display: flex; align-items: center;
-        gap: 12px; padding: 0 24px;
+        position: fixed; bottom: 0; left: 0; right: 0; height: 44px;
+        background: white; border-top: 1px solid #ccc;
+        display: flex; align-items: center; gap: 12px; padding: 0 16px;
         z-index: 9999;
     }
-    #date-display {
-        font-size: 14px; color: #333; width: 80px; flex-shrink: 0;
-    }
-    #slider {
-        flex: 1; cursor: pointer; accent-color: #555;
-    }
-    button {
-        font-family: 'Courier New', monospace;
-        font-size: 12px;
-        background: white; border: 1px solid #888;
-        padding: 5px 14px; cursor: pointer; color: #222;
-        flex-shrink: 0;
-    }
-    button:hover { background: #e8e8e8; }
-    select {
-        font-family: 'Courier New', monospace;
-        font-size: 12px;
-        border: 1px solid #888; padding: 4px 8px;
-        background: white; cursor: pointer;
-        flex-shrink: 0;
-    }
-
-    #legend {
-        position: absolute; top: 12px; right: 12px; z-index: 9000;
-        background: rgba(245,242,235,0.95);
-        border: 1px solid #bbb;
-        padding: 10px 14px; font-size: 12px;
-        font-family: 'Courier New', monospace;
-        line-height: 1.9;
-    }
-    .lr { display: flex; align-items: center; gap: 7px; }
-    .lb { width: 16px; height: 14px; border: 1px solid #ccc; flex-shrink: 0; }
+    #slider { flex: 1; }
 </style>
 </head>
 <body>
 <div id="map"></div>
 <div id="controls">
     <span id="date-display">--</span>
-    <button id="btn-restart">|&lt;</button>
-    <button id="btn-play">&gt; play</button>
+    <button id="btn-play">play</button>
     <input type="range" id="slider" min="0" value="0">
     <select id="speed-select">
         <option value="1200">lent</option>
@@ -167,16 +132,6 @@ def choropleth_timelapse(
         <option value="200">rapide</option>
         <option value="60">tres rapide</option>
     </select>
-</div>
-
-<div id="legend">
-    % infectes<br>
-    <div class="lr"><div class="lb" style="background:#f0ece4"></div> 0%</div>
-    <div class="lr"><div class="lb" style="background:#f7d9c4"></div> &lt;0.001%</div>
-    <div class="lr"><div class="lb" style="background:#e07840"></div> 0.05%</div>
-    <div class="lr"><div class="lb" style="background:#a03010"></div> 0.5%</div>
-    <div class="lr"><div class="lb" style="background:#3a0800"></div> &gt;2%</div>
-    <div class="lr"><div class="lb" style="background:#ccc"></div> n/a</div>
 </div>
 
 <script>
@@ -248,11 +203,11 @@ applyFrame(0);
 
 function stop() {
     playing = false; clearInterval(timer); timer = null;
-    btnPlay.textContent = '> play';
+    btnPlay.textContent = 'play';
 }
 function play() {
     if (idx >= DATES.length - 1) idx = 0;
-    playing = true; btnPlay.textContent = '|| pause';
+    playing = true; btnPlay.textContent = 'pause';
     timer = setInterval(() => {
         idx++; applyFrame(idx);
         if (idx >= DATES.length - 1) stop();
@@ -260,7 +215,6 @@ function play() {
 }
 
 btnPlay.addEventListener('click', () => playing ? stop() : play());
-document.getElementById('btn-restart').addEventListener('click', () => { stop(); idx = 0; applyFrame(0); });
 slider.addEventListener('input', () => { stop(); idx = parseInt(slider.value); applyFrame(idx); });
 speed.addEventListener('change', () => { if (playing) { stop(); play(); } });
 </script>
