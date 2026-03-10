@@ -32,7 +32,7 @@ if __name__ == "__main__":
     f_sir = str(OUT / "sir.html")
     f_map = str(OUT / "map.html")
 
-    viz_curves.plot_sir_animated(world, "Graphique SIR", f_sir)
+    viz_curves.plot_sir_animated(world, "COURBE INFECTES", f_sir)
     viz_map.choropleth_timelapse(data, str(GEO), f_map)
 
  #  La fin???????
