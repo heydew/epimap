@@ -3,186 +3,77 @@ import webbrowser
 from pathlib import Path
 
 
-def plot_sir_animated(data, title, out_html):
+def plot_sir_animated(data, titre, out_html):
+# tri par date
+    df = data.sort_values("date")
+    dates = [str(d)[:10] for d in df["date"]]
 
-    data   = data.sort_values("date").reset_index(drop=True)
-    dates  = [str(d)[:10] for d in data["date"]]
-    I_raw  = data["I"].rolling(window=10, min_periods=1, center=True).mean()
-    I      = [round(float(v)) for v in I_raw]
+# Smooth la courbe sinn c laid
+    infectes = df["I"].rolling(7).mean().fillna(0).astype(int).tolist()
 
-    html = """<!DOCTYPE html>
+    html = f"""
+<!DOCTYPE html>
 <html>
 <head>
-<meta charset="utf-8">
-<title>""" + title + """</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<style>
-    body { margin: 20px; font-family: monospace; background: white; }
-    #controls { margin-top: 8px; display: flex; align-items: center; gap: 8px; }
-    input[type=range] { flex: 1; }
-</style>
+    <title>COURBES INFECTES</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {{ font-family: sans-serif; margin: 20px; }}
+        canvas {{ max-height: 500px; }}
+        .ctrls {{ margin-top: 15px; display: flex; gap: 10px; align-items: center; }}
+    </style>
 </head>
 <body>
+    <h3>{titre}</h3>
+    <p id="txt">Chargement...</p>
+    <canvas id="chart"></canvas>
 
-<p id="infos">--</p>
-<canvas id="c"></canvas>
-<div id="controls">
-    <button id="playpause">play</button>
-    <input type="range" id="slider" min="0" value="0">
-    <select id="vitesse">
-        <option value="80">lent</option>
-        <option value="25" selected>normal</option>
-        <option value="6">rapide</option>
-    </select>
-</div>
+    <div class="ctrls">
+        <button onclick="play()">Play/Pause</button>
+        <input type="range" id="tick" style="flex:1" oninput="set_idx(this.value)">
+    </div>
 
-<script>
+    <script>
+        const D = {json.dumps(dates)};
+        const V = {json.dumps(infectes)};
+        let idx = 0, timer = null;
 
-var DATES = """ + json.dumps(dates) + """;
-var I     = """ + json.dumps(I) + """;
+        const ctx = document.getElementById('chart').getContext('2d');
+        const chart = new Chart(ctx, {{
+            type: 'line',
+            data: {{ labels: [], datasets: [{{ label: 'I', data: [], borderColor: 'red', fill: false }}] }},
+            options: {{ animation: false, scales: {{ y: {{ beginAtZero: true }} }} }}
+        }});
 
-var peakI   = Math.max(...I);
-var peakIdx = I.indexOf(peakI);
+        function set_idx(v) {{
+            idx = parseInt(v);
+            document.getElementById('txt').innerText = D[idx] + " - Infectés: " + V[idx].toLocaleString();
+            chart.data.labels = D.slice(0, idx + 1);
+            chart.data.datasets[0].data = V.slice(0, idx + 1);
+            chart.update();
+        }}
 
-var chart = new Chart(document.getElementById('c').getContext('2d'), {
-    type: 'line',
-    data: {
-        labels: [],
-        datasets: [
-            {
-                label: 'I infectes',
-                data: [],
-                borderColor: '#c0392b',
-                borderWidth: 2,
-                pointRadius: 0,
-                tension: 0.1,
-                fill: true,
-                backgroundColor: 'rgba(192,57,43,0.08)'
-            }
-        ]
-    },
-    options: {
-        animation: false,
-        responsive: true,
-        interaction: {mode:'index', intersect:false},
-        scales: {
-            x: {
-                ticks: {maxTicksLimit:10, font:{family:'Courier New', size:11}, maxRotation:30},
-                grid:  {color:'#eee'}
-            },
-            y: {
-                ticks: {
-                    font: {family:'Courier New', size:11},
-                    callback: function(v) {
-                        if (v >= 1e9) return (v/1e9).toFixed(1)+'G';
-                        if (v >= 1e6) return (v/1e6).toFixed(1)+'M';
-                        if (v >= 1e3) return (v/1e3).toFixed(0)+'k';
-                        return v;
-                    }
-                },
-                grid: {color:'#eee'}
-            }
-        },
-        plugins: {
-            legend: {labels: {font:{family:'Courier New', size:12}, boxWidth:18}},
-            tooltip: {callbacks: {label: function(c) {
-                return c.dataset.label + ': ' + Math.round(c.parsed.y).toLocaleString();
-            }}},
-            annotation: {}
-        }
-    },
-    plugins: [{
-        id: 'peak-line',
-        afterDraw: function(chart) {
-            var ctx = chart.ctx;
-            var currentLen = chart.data.labels.length;
-            if (currentLen <= peakIdx) return;
+        function play() {{
+            if(timer) {{ clearInterval(timer); timer = null; }}
+            else {{
+                timer = setInterval(() => {{
+                    idx++;
+                    if(idx >= D.length) {{ clearInterval(timer); timer = null; return; }}
+                    document.getElementById('tick').value = idx;
+                    set_idx(idx);
+                }}, 50);
+            }}
+        }}
 
-            var meta = chart.getDatasetMeta(0);
-            if (!meta.data[peakIdx]) return;
-
-            var x = meta.data[peakIdx].x;
-            var topY = chart.chartArea.top;
-            var botY = chart.chartArea.bottom;
-
-            ctx.save();
-            ctx.setLineDash([4, 4]);
-            ctx.strokeStyle = 'rgba(192,57,43,0.45)';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(x, topY);
-            ctx.lineTo(x, botY);
-            ctx.stroke();
-
-            ctx.setLineDash([]);
-            ctx.fillStyle = '#c0392b';
-            ctx.font = '11px Courier New';
-            ctx.fillText('pic: ' + Math.round(peakI).toLocaleString(), x + 5, topY + 14);
-            ctx.restore();
-        }
-    }]
-});
-
-
-function afficher(idx) {
-    chart.data.labels           = DATES.slice(0, idx+1);
-    chart.data.datasets[0].data = I.slice(0, idx+1);
-    chart.update('none');
-
-    document.getElementById('slider').value = idx;
-    document.getElementById('infos').textContent =
-        DATES[idx] + '   I infectes: ' + I[idx].toLocaleString();
-}
-
-
-var idx      = 0;
-var en_cours = false;
-var timer    = null;
-
-var slider  = document.getElementById('slider');
-var btn     = document.getElementById('playpause');
-var vitesse = document.getElementById('vitesse');
-
-slider.max = DATES.length - 1;
-afficher(0);
-
-
-function stop() {
-    en_cours = false;
-    clearInterval(timer); timer = null;
-    btn.textContent = 'play';
-}
-
-function play() {
-    if (idx >= DATES.length - 1) idx = 0;
-    en_cours = true;
-    btn.textContent = 'pause';
-    timer = setInterval(function() {
-        idx++;
-        afficher(idx);
-        if (idx >= DATES.length - 1) stop();
-    }, parseInt(vitesse.value));
-}
-
-
-btn.addEventListener('click', function() { en_cours ? stop() : play(); });
-
-slider.addEventListener('input', function() {
-    stop(); idx = parseInt(slider.value); afficher(idx);
-});
-
-vitesse.addEventListener('change', function() {
-    if (en_cours) { stop(); play(); }
-});
-
-</script>
+        document.getElementById('tick').max = D.length - 1;
+        set_idx(0);
+    </script>
 </body>
-</html>"""
-
+</html>
+"""
     Path(out_html).write_text(html, encoding="utf-8")
-    print("graphique -> " + out_html)
+    print(f" le graphique: {out_html}")
 
 
-def out(html_path):
-    import webbrowser
-    webbrowser.open(Path(html_path).resolve().as_uri())
+def out(p):
+    webbrowser.open(Path(p).resolve().as_uri())
