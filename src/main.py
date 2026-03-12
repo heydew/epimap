@@ -1,42 +1,43 @@
 import pandas as pd
-from pathlib import Path
 from io_data import get_epi, get_pop, run_sir
 import viz_curves
 import viz_map
+import os
 
-# les outs
-OUT = Path(__file__).resolve().parents[1] / "out"
-OUT.mkdir(exist_ok=True)
-GEO = Path(__file__).resolve().parents[1] / "data" / "world-countries.geojson"
+
+
+
+# chemins versfichiers
+DOSSIER_OUT = "../out"
+CHEMIN_GEO = "../data/world-countries.geojson"
+
+# cree le dossier out
+if not os.path.exists(DOSSIER_OUT):
+    os.mkdir(DOSSIER_OUT)
 
 if __name__ == "__main__":
-    # Chargement
-    epi = get_epi()
-    pop = get_pop(codes=set(epi["code"].unique()))
+    donnees_epi = get_epi()
+    donnees_pop = get_pop(codes=set(donnees_epi["code"].unique()))
 
-    # merge sur 'code' (ISO) et pas 'country' — évite les problèmes de noms différents
-    df = epi.merge(pop, on="code").dropna(subset=["pop"])
+# merge sur code (code ISO = AFG pour afghanistan)
+    df = donnees_epi.merge(donnees_pop, on="code").dropna(subset=["pop"])
     df = df.rename(columns={"pop": "population"})
 
-    data = run_sir(df)
+    donnees = run_sir(df)
 
-    # stats du monde
-    world = data.groupby("date")[["S", "I", "R"]].sum().reset_index()
-    # la pop totale
-    total_p = data.drop_duplicates("country")["population"].sum()
+    monde = donnees.groupby("date")[["S", "I", "R"]].sum().reset_index()
+    pop_totale = donnees.drop_duplicates("pays")["population"].sum()
 
-    # petit print en mode statistiques (manque la date du pic jvais faire plus tard)
-    print(f"Stats: {len(data.country.unique())} pays chargés.")
-    print(f"Max infectés: {world['I'].max():,.0f} personnes")
+    print(f"Pays total: {len(donnees.pays.unique())} pays charges.")
+    print(f"Max infectes: {monde['I'].max()}")
 
-    # pour export
-    f_sir = str(OUT / "sir.html")
-    f_map = str(OUT / "map.html")
+# chemins sortie
+    fichier_sir = DOSSIER_OUT + "/sir.html"
+    fichier_carte = DOSSIER_OUT + "/map.html"
 
-    viz_curves.plot_sir_animated(world, "COURBE INFECTES", f_sir)
-    viz_map.choropleth_timelapse(data, str(GEO), f_map)
+    viz_curves.plot_sir_anime(monde, "COURBE INFECTES", fichier_sir)
+    viz_map.carte_covid(donnees, CHEMIN_GEO, fichier_carte)
 
-    # La fin???????
     print("Ca ouvre!")
-    viz_curves.out(f_sir)
-    viz_map.out(f_map)
+    viz_curves.out(fichier_sir)
+    viz_map.out(fichier_carte)

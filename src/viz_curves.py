@@ -3,76 +3,107 @@ import webbrowser
 from pathlib import Path
 
 
-def plot_sir_animated(data, titre, out_html):
+def plot_sir_anime(donnees, titre, fichier_html):
 # tri par date
-    df = data.sort_values("date")
-    dates = [str(d)[:10] for d in df["date"]]
+    df = donnees.sort_values("date")
+    liste_dates = [str(d)[:10] for d in df["date"]]
 
-# Smooth la courbe sinn c laid
-    infectes = df["I"].rolling(7).mean().fillna(0).astype(int).tolist()
+# smooth la courbe sinn c laid
+    nb_infectes = df["I"].rolling(7).mean().fillna(0).astype(int).tolist()
 
     html = f"""
 <!DOCTYPE html>
 <html>
 <head>
-    <title>COURBES INFECTES</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        body {{ font-family: sans-serif; margin: 20px; }}
-        canvas {{ max-height: 500px; }}
-        .ctrls {{ margin-top: 15px; display: flex; gap: 10px; align-items: center; }}
-    </style>
+<title>COURBES INFECTES</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+body {{ font-family: Arial; margin: 20px; }}
+canvas {{ max-height: 500px; }}
+.ctrls {{ margin-top: 15px; display: flex; gap: 10px; align-items: center; }}
+</style>
 </head>
 <body>
-    <h3>{titre}</h3>
-    <p id="txt">Chargement...</p>
-    <canvas id="chart"></canvas>
 
-    <div class="ctrls">
-        <button onclick="play()">Play/Pause</button>
-        <input type="range" id="tick" style="flex:1" oninput="set_idx(this.value)">
-    </div>
+<h3>{titre}</h3>
+<p id="txt"></p>
+<canvas id="graphique"></canvas>
 
-    <script>
-        const D = {json.dumps(dates)};
-        const V = {json.dumps(infectes)};
-        let idx = 0, timer = null;
+<div class="ctrls">
+    <button onclick="jouer()">Play/Pause</button>
+    <input type="range" id="curseur" style="flex:1" oninput="set_idx(this.value)">
+</div>
 
-        const ctx = document.getElementById('chart').getContext('2d');
-        const chart = new Chart(ctx, {{
-            type: 'line',
-            data: {{ labels: [], datasets: [{{ label: 'I', data: [], borderColor: 'red', fill: false }}] }},
-            options: {{ animation: false, scales: {{ y: {{ beginAtZero: true }} }} }}
-        }});
+<script>
 
-        function set_idx(v) {{
-            idx = parseInt(v);
-            document.getElementById('txt').innerText = D[idx] + " - Infectés: " + V[idx].toLocaleString();
-            chart.data.labels = D.slice(0, idx + 1);
-            chart.data.datasets[0].data = V.slice(0, idx + 1);
-            chart.update();
-        }}
+//on nomme nos variables 
+var dates = {json.dumps(liste_dates)};
+var valeurs = {json.dumps(nb_infectes)};
+var nb_dates = dates.length;
+var idx = 0;
+var en_train_de_jouer = false;
+var minuterie = null;
 
-        function play() {{
-            if(timer) {{ clearInterval(timer); timer = null; }}
-            else {{
-                timer = setInterval(() => {{
-                    idx++;
-                    if(idx >= D.length) {{ clearInterval(timer); timer = null; return; }}
-                    document.getElementById('tick').value = idx;
-                    set_idx(idx);
-                }}, 50);
-            }}
-        }}
+// creation graphique avk Chart.js
+var ctx = document.getElementById('graphique').getContext('2d');
+var graphique = new Chart(ctx, {{
+  type: 'line',
+  data: {{
+    labels: [],
+      datasets: [{{
+      label: 'Infectes',
+      data: [],
+      borderColor: 'red',
+      fill: false
+    }}]
+  }},
+  options: {{
+    animation: false,
+        scales: {{ y: {{ beginAtZero: true }} }}
+  }}
+}});
 
-        document.getElementById('tick').max = D.length - 1;
-        set_idx(0);
-    </script>
+// met a jour le graphique quand on bouge la souris
+function set_idx(v) {{
+idx = parseInt(v);
+  console.log('idx: ' + idx);
+  document.getElementById('txt').innerText = dates[idx] + " - infectes: " + valeurs[idx];
+  graphique.data.labels = dates.slice(0, idx + 1);
+    graphique.data.datasets[0].data = valeurs.slice(0, idx + 1);
+  graphique.update();
+}}
+
+//arrete la simulation quand on appuie sur play/pause
+function jouer()
+{{
+  if (minuterie) {{
+    clearInterval(minuterie);
+      minuterie = null;
+  }}
+  else {{
+    minuterie = setInterval(function() {{
+      idx++;
+      if (idx >= nb_dates) {{
+          clearInterval(minuterie);
+          minuterie = null;
+          return;
+      }}
+        document.getElementById('curseur').value = idx;
+      set_idx(idx);
+    }}, 50);
+  }}
+}}
+
+// faut mettre le max du range sinon ca marche pas
+document.getElementById('curseur').max = nb_dates - 1;
+set_idx(0);
+
+</script>
 </body>
 </html>
 """
-    Path(out_html).write_text(html, encoding="utf-8")
-    print(f" le graphique: {out_html}")
+    Path(fichier_html).write_text(html, encoding="utf-8")
+    print(f"le graphique infectés: {fichier_html}")
 
 
 def out(p):

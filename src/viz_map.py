@@ -3,229 +3,224 @@ import pandas as pd
 from pathlib import Path
 import webbrowser
 
-# Mapping CSV (epidemie.csv) → GeoJSON (world-countries.geojson)
-# Clé = nom dans epidemie.csv
-# Valeur = nom dans world-countries.geojson
-CSV_TO_GEO = {
-    "Guinea-Bissau":                    "Guinea Bissau",
-    "Congo":                            "Republic of the Congo",
-    "Democratic Republic of Congo":     "Democratic Republic of the Congo",
-    "Eswatini":                         "Swaziland",
-    "Tanzania":                         "United Republic of Tanzania",
-    "Bahamas":                          "The Bahamas",
-    "Serbia":                           "Republic of Serbia",
-    "North Macedonia":                  "Macedonia",
-    "Czechia":                          "Czech Republic",
-    "United States":                    "United States of America",
-    # Ivory Coast n'a aucun équivalent dans le CSV — pas de données disponibles
+# fait un dictionnaire pour les pays qui ont noms diff, ya pas cote d'ivoire dans le csv tho
+NOM_CSV_VERS_GEO = {
+    "Guinea-Bissau": "Guinea Bissau",
+    "Congo": "Republic of the Congo",
+    "Democratic Republic of Congo": "Democratic Republic of the Congo",
+    "Eswatini": "Swaziland",
+    "Tanzania": "United Republic of Tanzania",
+    "Bahamas": "The Bahamas",
+    "Serbia": "Republic of Serbia",
+    "North Macedonia": "Macedonia",
+    "Czechia": "Czech Republic",
+    "United States": "United States of America",
 }
 
 
-def choropleth_timelapse(data, geojson_path, out_file):
-    with open(geojson_path, "r", encoding="utf-8") as f:
+def carte_covid(donnees, chemin_geojson, fichier_sortie):
+    with open(chemin_geojson, "r", encoding="utf-8") as f:
         geo = json.load(f)
 
-    df = data.copy()
-    df["name"] = df["country"].replace(CSV_TO_GEO)
+    df = donnees.copy()
+    df["nom"] = df["pays"].replace(NOM_CSV_VERS_GEO)
     df["pct"] = (df["I"] / df["population"] * 100)
 
-    # Données mensuelles pour la carte choroplèthe
-    df['month'] = df['date'].dt.strftime('%Y-%m')
-    pivot = df.groupby(['month', 'name'])['pct'].mean().unstack(level=0).fillna(0)
-    dates_list = sorted(pivot.columns.tolist())
-    map_data = pivot.to_dict(orient='index')
+#fait par mois sinon le fichier html est trop chargé
+    df['mois'] = df['date'].dt.strftime('%Y-%m')
+    temp = df.groupby(['mois', 'nom'])['pct'].mean()
+    temp = temp.unstack(level=0)
+    temp = temp.fillna(0)
+    liste_dates = sorted(temp.columns.tolist())
+    data_carte = {}
+    for pays in temp.index:
+        data_carte[pays] = {}
+        for m in liste_dates:
+            data_carte[pays][m] = temp.loc[pays, m]
 
-    # Données SIR complètes par pays pour les graphiques au clic (smooth 7j)
-    sir_by_country = {}
-    for name, g in df.groupby('name'):
-        g = g.sort_values('date')
-        sir_by_country[name] = {
-            'dates': [str(d)[:10] for d in g['date']],
-            'I': g['I'].rolling(7).mean().fillna(0).astype(int).tolist(),
-            'S': g['S'].rolling(7).mean().fillna(0).astype(int).tolist(),
-            'R': g['R'].rolling(7).mean().fillna(0).astype(int).tolist(),
+# prend les dates par AAAA-MM-JJ comme ca ya pas d'heures ni de sec
+    sir_par_pays = {}
+    for nom, groupe in df.groupby('nom'):
+        groupe = groupe.sort_values('date')
+        dates_pays = [str(d)[:10] for d in groupe['date']]
+# smooth sur 7 jours
+        I_smooth = groupe['I'].rolling(7).mean().fillna(0)
+        S_smooth = groupe['S'].rolling(7).mean().fillna(0)
+        R_smooth = groupe['R'].rolling(7).mean().fillna(0)
+        sir_par_pays[nom] = {
+            'dates': dates_pays,
+            'I': [int(x) for x in I_smooth],
+            'S': [int(x) for x in S_smooth],
+            'R': [int(x) for x in R_smooth],
         }
 
     html = f"""<!DOCTYPE html>
 <html>
 <head>
-    <title>CARTE COVID</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        body {{ margin: 0; font-family: sans-serif; }}
-        #map {{ height: 560px; width: 100%; }}
-        #controls {{
-            padding: 10px 15px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            background: #f5f5f5;
-            border-top: 1px solid #ddd;
-        }}
-        #btn_play {{
-            padding: 6px 18px; font-size: 15px; cursor: pointer;
-            background: #2c7bb6; color: white; border: none; border-radius: 4px;
-        }}
-        #curseur {{ flex: 1; }}
-        #modal {{
-            display: none; position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.5); z-index: 9999;
-            justify-content: center; align-items: center;
-        }}
-        #modal.visible {{ display: flex; }}
-        #modal_box {{
-            background: white; border-radius: 8px;
-            padding: 20px 24px; width: 640px; max-width: 95vw;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-        }}
-        #modal_titre {{ font-size: 18px; font-weight: bold; margin-bottom: 14px; }}
-        #modal_fermer {{
-            float: right; cursor: pointer; font-size: 22px;
-            color: #aaa; border: none; background: none; line-height: 1;
-        }}
-        #modal_fermer:hover {{ color: #333; }}
-        #modal_canvas {{ max-height: 320px; }}
-    </style>
+<title>CARTE COVID</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+body {{ margin: 0; font-family: Arial; }}
+#carte {{ width: 100%; height: calc(100vh - 50px); }}
+.ctrls {{ display: flex; align-items: center; gap: 10px; padding: 8px 15px; }}
+#popup {{ display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; }}
+#popup-box {{ background:white; width:550px; margin-left:400px; margin-top:100px; padding:20px; }}
+#popup-box canvas {{ max-height:280px; }}
+</style>
 </head>
 <body>
-    <div id="map"></div>
-    <div id="controls">
-        <button id="btn_play" onclick="toggle_play()">&#9654; Play</button>
-        <b id="date_texte" style="min-width: 90px;">---</b>
-        <input type="range" id="curseur" oninput="set_idx(this.value)">
-        <span style="font-size:12px; color:#888;">&#128065; Cliquer sur un pays pour son graphique</span>
-    </div>
 
-    <div id="modal" onclick="fermer_modal(event)">
-        <div id="modal_box">
-            <button id="modal_fermer" onclick="document.getElementById('modal').classList.remove('visible')">&#10005;</button>
-            <div id="modal_titre">---</div>
-            <canvas id="modal_canvas"></canvas>
-        </div>
-    </div>
+<div id="carte"></div>
+<div class="ctrls">
+    <button onclick="jouer()">Play/Pause</button>
+    <span id="txt">—</span>
+    <input type="range" id="curseur" style="flex:1" oninput="set_idx(this.value)">
+</div>
 
-    <script>
-        const map_data = {json.dumps(map_data)};
-        const dates = {json.dumps(dates_list)};
-        const geo = {json.dumps(geo)};
-        const sir_data = {json.dumps(sir_by_country)};
+<div id="popup">
+<div id="popup-box">
+    <p id="popup-titre" style="font-weight:bold">—</p>
+    <canvas id="popup-graph"></canvas>
+    <br><button onclick="document.getElementById('popup').style.display='none'">Fermer</button>
+</div>
+</div>
 
-        const map = L.map('map').setView([25, 10], 2);
-        L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png').addTo(map);
+<script>
 
-        function couleur_pays(p) {{
-            if (p > 1.0) return 'darkred';
-            if (p > 0.5) return 'red';
-            if (p > 0.1) return 'darkorange';
-            if (p > 0.05) return 'orange';
-            if (p > 0.001) return 'yellow';
-            return 'lightgrey';
+//les variables
+var data_carte = {json.dumps(data_carte)};
+var liste_dates = {json.dumps(liste_dates)};
+var geo = {json.dumps(geo)};
+var sir_par_pays = {json.dumps(sir_par_pays)};
+var nb_dates = liste_dates.length;
+
+
+// cree la carte avk leaflet
+var carte = L.map('carte').setView([20, 10], 2);
+L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
+attribution: '© OpenStreetMap contributors'
+}}).addTo(carte);
+
+//return une differente couleur selon le pourcentage de la pop infecté
+function couleur_pays(p) {{
+if (p > 1) return 'darkred';
+else if (p > 0.5) return 'red';
+else if (p > 0.1) return 'darkorange';
+else if (p > 0.05) return 'orange';
+else if (p > 0.001) return 'yellow';
+else return 'lightgrey';
+}}
+
+var couche_active = null;
+var idx_courant = 0;
+var minuterie = null;
+
+//met a jour la carte pour la date n
+function maj_carte(n) {{
+var d = liste_dates[n];
+document.getElementById('txt').innerText = d;
+document.getElementById('curseur').value = n;
+
+// faut enlever l'ancienne couche avant sinon ca s'enpile 
+if (couche_active) {{
+carte.removeLayer(couche_active);
+}}
+
+couche_active = L.geoJson(geo, {{
+    style: function(feature) {{
+        var nom = feature.properties.name;
+        var pct = 0;
+        if (data_carte[nom] && data_carte[nom][d]) {{
+            pct = data_carte[nom][d];
         }}
-
-        let couche;
-        function maj_carte(n) {{
-            const d = dates[n];
-            document.getElementById('date_texte').innerText = d;
-            document.getElementById('curseur').value = n;
-
-            if (couche) map.removeLayer(couche);
-
-            couche = L.geoJson(geo, {{
-                style: function(feature) {{
-                    var pct = 0;
-                    const nom = feature.properties.name;
-                    if (map_data[nom]) pct = map_data[nom][d] || 0;
-                    return {{ fillColor: couleur_pays(pct), weight: 1, color: 'white', fillOpacity: 0.8 }};
-                }},
-                onEachFeature: function(feature, layer) {{
-                    const nom = feature.properties.name;
-                    layer.on('click', function() {{
-                        ouvrir_graphique(nom);
-                    }});
-                    layer.on('mouseover', function(e) {{
-                        const pct = (map_data[nom] && map_data[nom][dates[idx]])
-                            ? map_data[nom][dates[idx]].toFixed(3) + '%'
-                            : 'pas de donnees';
-                        layer.bindTooltip('<b>' + nom + '</b><br>Infectes: ' + pct, {{sticky: true}}).openTooltip(e.latlng);
-                    }});
-                }}
-            }}).addTo(map);
-        }}
-
-        // graphique pour chaque pays quand on fait clique gauche dessus sur le pays
-        let chart_instance = null;
-
-        function ouvrir_graphique(nom) {{
-            const d = sir_data[nom];
-            if (!d) {{
-                alert('Pas de données SIR pour : ' + nom);
-                return;
-            }}
-            document.getElementById('modal_titre').innerText = nom + ' \u2014 Courbe SIR';
-            document.getElementById('modal').classList.add('visible');
-
-            if (chart_instance) {{ chart_instance.destroy(); chart_instance = null; }}
-
-            const ctx = document.getElementById('modal_canvas').getContext('2d');
-            chart_instance = new Chart(ctx, {{
-                type: 'line',
-                data: {{
-                    labels: d.dates,
-                    datasets: [
-                        {{ label: 'Infectes (I)', data: d.I, borderColor: 'crimson',    backgroundColor: 'rgba(220,20,60,0.07)',  fill: true, pointRadius: 0, tension: 0.3 }},
-                        {{ label: 'Retablis (R)', data: d.R, borderColor: 'seagreen',   backgroundColor: 'rgba(46,139,87,0.07)', fill: true, pointRadius: 0, tension: 0.3 }},
-                        {{ label: 'Susceptibles (S)', data: d.S, borderColor: '#2c7bb6', backgroundColor: 'rgba(44,123,182,0.07)', fill: true, pointRadius: 0, tension: 0.3 }}
-                    ]
-                }},
-                options: {{
-                    animation: false,
-                    responsive: true,
-                    plugins: {{ legend: {{ position: 'top' }} }},
-                    scales: {{
-                        x: {{ ticks: {{ maxTicksLimit: 8 }} }},
-                        y: {{ beginAtZero: true }}
-                    }}
-                }}
+        return {{
+            fillColor: couleur_pays(pct),
+            weight: 1,
+            color: 'white',
+            fillOpacity: 0.75
+            }};
+        }},
+        onEachFeature: function(feature, layer) {{
+            var nom = feature.properties.name;
+            layer.on('click', function() {{
+                console.log(nom);
+                ouvrir_graphique(nom);
             }});
-        }}
-
-        function fermer_modal(e) {{
-            if (e.target === document.getElementById('modal'))
-                document.getElementById('modal').classList.remove('visible');
-        }}
-
-        // Play/Stop
-        function set_idx(v) {{ idx = parseInt(v); maj_carte(idx); }}
-
-        let idx = 0, timer = null;
-
-        function toggle_play() {{
-            if (timer) {{
-                clearInterval(timer); timer = null;
-                document.getElementById('btn_play').innerHTML = '&#9654; Play';
-            }} else {{
-                if (idx >= dates.length - 1) idx = 0;
-                document.getElementById('btn_play').innerHTML = '&#9646;&#9646; Stop';
-                timer = setInterval(() => {{
-                    idx++;
-                    maj_carte(idx);
-                    if (idx >= dates.length - 1) {{
-                        clearInterval(timer); timer = null;
-                        document.getElementById('btn_play').innerHTML = '&#9654; Play';
-                    }}
-                }}, 200);
+        layer.on('mouseover', function(e) {{
+            var val = 'no data';
+                if (data_carte[nom] && data_carte[nom][liste_dates[idx_courant]]) {{
+                val = data_carte[nom][liste_dates[idx_courant]].toFixed(2) + '%';
             }}
-        }}
+            layer.bindTooltip(nom + ' : ' + val, {{sticky:true}}).openTooltip(e.latlng);
+        }});
+    }}
+}}).addTo(carte);
+}}
 
-        document.getElementById('curseur').max = dates.length - 1;
-        maj_carte(0);
-    </script>
+var graph_sir = null;
+
+// ouvre le popup avec la courbe sir du pays
+function ouvrir_graphique(nom) {{
+var data = sir_par_pays[nom];
+    document.getElementById('popup-titre').innerText = nom;
+    document.getElementById('popup').style.display = 'block';
+
+//faut detruire le chart avant d'en refaire un sinon ca marche pas
+if (graph_sir) {{
+    graph_sir.destroy();
+}}
+
+var ctx = document.getElementById('popup-graph').getContext('2d');
+    graph_sir = new Chart(ctx, {{
+    type: 'line',
+        data: {{
+        labels: data.dates,
+        datasets: [
+        {{label: 'Infectes', data: data.I, borderColor: 'red', fill: false, pointRadius: 0}},
+        {{label: 'Retablis', data: data.R, borderColor: 'green', fill: false, pointRadius: 0}},
+        {{label: 'Susceptibles', data: data.S, borderColor: 'blue', fill: false, pointRadius: 0}}
+        ]
+    }},
+    options: {{ animation: false, scales: {{ y: {{ beginAtZero: true }} }} }}
+    }});
+}}
+
+function set_idx(v)
+{{
+idx_courant = parseInt(v);
+    maj_carte(idx_courant);
+}}
+
+// fait pause a la simulation quand on clique sur play/pause
+function jouer()
+{{
+if (minuterie) {{
+    clearInterval(minuterie);
+    minuterie = null;
+}}
+else {{
+    minuterie = setInterval(function() {{
+    idx_courant++;
+        if (idx_courant >= nb_dates) {{
+        clearInterval(minuterie);
+            minuterie = null;
+        return;
+        }}
+    set_idx(idx_courant);
+    }}, 200);
+}}
+}}
+
+//faut mettre le max sinon le curseur marche pas
+document.getElementById('curseur').max = nb_dates - 1;
+maj_carte(0);
+
+</script>
 </body>
 </html>"""
-    Path(out_file).write_text(html, encoding="utf-8")
+    Path(fichier_sortie).write_text(html, encoding="utf-8")
 
 
 def out(p):

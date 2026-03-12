@@ -1,69 +1,77 @@
 import pandas as pd
 import numpy as np
-from pathlib import Path
 
-# remonte le dossier de un pour avoir les datas
-BASE = Path(__file__).resolve().parents[1] / "data"
+
+
+DOSSIER_DATA = "../data"
 
 
 def get_epi(p=None):
-    p = p or (BASE / "epidemie.csv")
+    if p is None:
+        p = DOSSIER_DATA + "/epidemie.csv"
     df = pd.read_csv(p)
 
-    # clean des noms de colonnes du csv qui sont chiant
-    cols = {
-        "Entity": "country", "Code": "code", "Day": "date"
+
+
+
+ # ptit rename des colones pour que ca soit moins chianr
+    colonnes = {
+        "Entity": "pays", "Code": "code", "Day": "date"
     }
     for c in df.columns:
-        low = c.lower()
-        if "death" in low and "cumulative" in low: cols[c] = "cum_deaths"
-        if "cases" in low and "cumulative" in low: cols[c] = "cum_cases"
+        minuscule = c.lower()
+        if "death" in minuscule and "cumulative" in minuscule: colonnes[c] = "deces_cum"
+        if "cases" in minuscule and "cumulative" in minuscule: colonnes[c] = "cas_cum"
 
-    df = df.rename(columns=cols)
+    df = df.rename(columns=colonnes)
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
 
-    # enleve les lignes vides et les agrégats régionaux (pas de code ISO)
+ # enleve les trucs genre afrique, europe etc(si ya pas de code ISO c pas un vrai pays)
     df = df[df["code"].notna() & (df["code"] != "")]
-    return df.sort_values(["country", "date"]).fillna(0)
-
+    return df.sort_values(["pays", "date"]).fillna(0)
 
 def get_pop(p=None, codes=None):
-    p = p or (BASE / "population.csv")
+    if p is None:
+        p = DOSSIER_DATA + "/population.csv"
     df = pd.read_csv(p)
 
-    # normalise les colonnes (World Bank style)
     df.columns = [c.lower().strip() for c in df.columns]
     df = df.rename(columns={"country code": "code", "value": "pop"})
 
-    # On garde que les pays qu'on a dans le fichier épidémie
     if codes:
         df = df[df["code"].isin(codes)]
 
-    # prend juste la ligne la plus récente
+# derniere annee dispo par pays
     df = df.sort_values("year").groupby("code").last().reset_index()
-    return df[["code", "pop"]]  # NOTE: merge sur 'code', plus sur 'country'
+    return df[["code", "pop"]]
 
 
-def run_sir(df, g=0.1):
-    res = []
-    for c, g_df in df.groupby("country"):
-        g_df = g_df.sort_values("date").copy()
-        n = float(g_df["population"].iloc[0])
 
-        c_cases = g_df["cum_cases"].values
-        # Diff pour avoir les nouveaux par jour
-        new = np.diff(c_cases, prepend=c_cases[0])
-        new[new < 0] = 0
+def run_sir(df, g=0.1):  # g = estimation de temps guerison(10j)
+    resultats = []
+    for pays, groupe in df.groupby("pays"):
+        groupe = groupe.sort_values("date").copy()
+        nb_pop = float(groupe["population"].iloc[0])
 
-        i, r = np.zeros(len(g_df)), np.zeros(len(g_df))
-        i[0], r[0] = c_cases[0], g_df["cum_deaths"].iloc[0]
+        cas_cumules = groupe["cas_cum"].values
+        nouveaux = np.diff(cas_cumules, prepend=cas_cumules[0])
+        nouveaux[nouveaux < 0] = 0
 
-        for k in range(1, len(g_df)):
-            recov = g * i[k - 1]
-            i[k] = max(0, i[k - 1] + new[k] - recov)
-            r[k] = min(r[k - 1] + recov, n - i[k])
+        infectes = np.zeros(len(groupe))
+        retablis = np.zeros(len(groupe))
+        infectes[0] = cas_cumules[0]
+        retablis[0] = groupe["deces_cum"].iloc[0]
 
-        g_df["I"], g_df["R"] = i, r
-        g_df["S"] = n - i - r
-        res.append(g_df)
-    return pd.concat(res)
+        for k in range(1, len(groupe)):
+            gueris = g * infectes[k - 1]
+            infectes[k] = max(0, infectes[k - 1] + nouveaux[k] - gueris)
+            retablis[k] = min(retablis[k - 1] + gueris, nb_pop - infectes[k])
+
+
+        groupe["I"] = infectes
+        groupe["R"] = retablis
+        groupe["S"] = nb_pop - infectes - retablis
+        resultats.append(groupe)
+
+
+    return pd.concat(resultats)
