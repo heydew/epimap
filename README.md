@@ -11,5 +11,5 @@ Projet de simulation d’épidémies avec le modèle SIR + visualisation sur car
    python src/main.py
 
 ## Sorties
-- `out/sir_curves.png`
+- `out/sir.html`
 - `out/map.html`
