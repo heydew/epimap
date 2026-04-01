@@ -80,7 +80,7 @@ class MoteurSEIRDV:
     def __init__(self, config: ConfigMaladie, population_df: pd.DataFrame, geojson_path: str):
         self.cfg = config
         self.pop_df = population_df.copy()
-        self.pays = list(population_df["country"].unique())
+        self.pays = list(population_df["pays"].unique())
 
         self.sigma = 1.0 / config.jours_incubation
         self.gamma = 1.0 / config.jours_contagieux
@@ -119,7 +119,7 @@ class MoteurSEIRDV:
     def _initialiser_etats(self):
         self.etats: Dict[str, Dict[str, float]] = {}
         for _, row in self.pop_df.iterrows():
-            p = row["country"]
+            p = row["pays"]
             n = float(row["pop"])
             self.etats[p] = {"S": n, "E": 0.0, "I": 0.0, "R": 0.0, "D": 0.0, "V": 0.0, "pop": n}
 
@@ -184,7 +184,12 @@ class MoteurSEIRDV:
                     seeds[p_dst] = seeds.get(p_dst, 0) + 1
 
         for p_dst, n_seed in seeds.items():
-            seed = min(n_seed, self.etats[p_dst]["S"])
+            # Lire le S courant a chaque fois : plusieurs sources peuvent cibler le meme pays,
+            # il faut capiter sur le S reellement disponible apres chaque soustraction.
+            s_dispo = self.etats[p_dst]["S"]
+            seed = min(n_seed, s_dispo)
+            if seed <= 0:
+                continue
             self.etats[p_dst]["S"] -= seed
             self.etats[p_dst]["E"] += seed
 

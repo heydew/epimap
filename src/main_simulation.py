@@ -181,7 +181,7 @@ if __name__ == "__main__":
     pop = get_pop(p=str(POP))
     # On filtre pour ne garder que les pays significatifs pour la simulation
     pop = pop[pop["pop"] > 100_000].copy()
-    pays_valides = set(pop["country"].unique())
+    pays_valides = set(pop["pays"].unique())
 
     # Saisie utilisateur
     maladie, date_fin = saisir_maladie(pays_valides)
