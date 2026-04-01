@@ -1,8 +1,6 @@
 import pandas as pd
 import numpy as np
 
-
-
 DOSSIER_DATA = "../data"
 
 
@@ -11,24 +9,21 @@ def get_epi(p=None):
         p = DOSSIER_DATA + "/epidemie.csv"
     df = pd.read_csv(p)
 
-
-
-
- # ptit rename des colones pour que ca soit moins chianr
-    colonnes = {
-        "Entity": "pays", "Code": "code", "Day": "date"
-    }
+    colonnes = {"Entity": "pays", "Code": "code", "Day": "date"}
     for c in df.columns:
         minuscule = c.lower()
-        if "death" in minuscule and "cumulative" in minuscule: colonnes[c] = "deces_cum"
-        if "cases" in minuscule and "cumulative" in minuscule: colonnes[c] = "cas_cum"
+        if "death" in minuscule and "cumulative" in minuscule:
+            colonnes[c] = "deces_cum"
+        if "cases" in minuscule and "cumulative" in minuscule:
+            colonnes[c] = "cas_cum"
 
     df = df.rename(columns=colonnes)
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
 
- # enleve les trucs genre afrique, europe etc(si ya pas de code ISO c pas un vrai pays)
+    # enleve les agregats regionaux (pas de code ISO = pas un vrai pays)
     df = df[df["code"].notna() & (df["code"] != "")]
     return df.sort_values(["pays", "date"]).fillna(0)
+
 
 def get_pop(p=None, codes=None):
     if p is None:
@@ -36,26 +31,32 @@ def get_pop(p=None, codes=None):
     df = pd.read_csv(p)
 
     df.columns = [c.lower().strip() for c in df.columns]
-    df = df.rename(columns={"country code": "code", "value": "pop"})
+    # FIXE: "country name" → "pays" pour que le merge dans main.py fonctionne
+    df = df.rename(columns={"country name": "pays", "country code": "code", "value": "pop"})
 
     if codes:
         df = df[df["code"].isin(codes)]
 
-# derniere annee dispo par pays
+    # derniere annee dispo par pays
     df = df.sort_values("year").groupby("code").last().reset_index()
-    return df[["code", "pop"]]
+    return df[["pays", "code", "pop"]]
 
 
-
-def run_sir(df, g=0.1):  # g = estimation de temps guerison(10j)
+def run_sir(df, g=0.1):
+    """
+    Reconstruit S/I/R depuis les données cumulatives réelles.
+    g = taux de guérison journalier (défaut 0.1 = 10 jours de contagiosité)
+    """
     resultats = []
     for pays, groupe in df.groupby("pays"):
         groupe = groupe.sort_values("date").copy()
         nb_pop = float(groupe["population"].iloc[0])
+        if nb_pop <= 0:
+            continue
 
-        cas_cumules = groupe["cas_cum"].values
+        cas_cumules = groupe["cas_cum"].values.astype(float)
         nouveaux = np.diff(cas_cumules, prepend=cas_cumules[0])
-        nouveaux[nouveaux < 0] = 0
+        nouveaux = np.clip(nouveaux, 0, None)  # jamais negatif
 
         infectes = np.zeros(len(groupe))
         retablis = np.zeros(len(groupe))
@@ -64,14 +65,15 @@ def run_sir(df, g=0.1):  # g = estimation de temps guerison(10j)
 
         for k in range(1, len(groupe)):
             gueris = g * infectes[k - 1]
-            infectes[k] = max(0, infectes[k - 1] + nouveaux[k] - gueris)
+            infectes[k] = max(0.0, infectes[k - 1] + nouveaux[k] - gueris)
+            # cap R à N-I pour conserver la masse
             retablis[k] = min(retablis[k - 1] + gueris, nb_pop - infectes[k])
-
 
         groupe["I"] = infectes
         groupe["R"] = retablis
-        groupe["S"] = nb_pop - infectes - retablis
+        groupe["S"] = np.clip(nb_pop - infectes - retablis, 0, nb_pop)
         resultats.append(groupe)
 
-
-    return pd.concat(resultats)
+    if not resultats:
+        return pd.DataFrame()
+    return pd.concat(resultats, ignore_index=True)

@@ -3,107 +3,176 @@ import webbrowser
 from pathlib import Path
 
 
-def plot_sir_anime(donnees, titre, fichier_html):
-# tri par date
-    df = donnees.sort_values("date")
-    liste_dates = [str(d)[:10] for d in df["date"]]
+def plot_sir_animated(data, titre, out_html):
+    """Courbes SIR animées pour le pipeline COVID réel."""
+    df = data.sort_values("date")
+    dates = [str(d)[:10] for d in df["date"]]
 
-# smooth la courbe sinn c laid
-    nb_infectes = df["I"].rolling(7).mean().fillna(0).astype(int).tolist()
+    # lissage 7 jours
+    infectes = df["I"].rolling(7, min_periods=1).mean().fillna(0).astype(int).tolist()
 
-    html = f"""
-<!DOCTYPE html>
+    html = f"""<!DOCTYPE html>
 <html>
 <head>
-<title>COURBES INFECTES</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<style>
-body {{ font-family: Arial; margin: 20px; }}
-canvas {{ max-height: 500px; }}
-.ctrls {{ margin-top: 15px; display: flex; gap: 10px; align-items: center; }}
-</style>
+    <title>Courbes infectés</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {{ font-family: sans-serif; margin: 20px; }}
+        canvas {{ max-height: 500px; }}
+        .ctrls {{ margin-top: 15px; display: flex; gap: 10px; align-items: center; }}
+        button {{ padding: 5px 14px; cursor: pointer; }}
+    </style>
 </head>
 <body>
+    <h3>{titre}</h3>
+    <p id="txt">Chargement...</p>
+    <canvas id="chart"></canvas>
+    <div class="ctrls">
+        <button onclick="play()">Play/Pause</button>
+        <input type="range" id="tick" style="flex:1" oninput="set_idx(this.value)">
+    </div>
+    <script>
+        const D = {json.dumps(dates)};
+        const V = {json.dumps(infectes)};
+        let idx = 0, timer = null;
 
-<h3>{titre}</h3>
-<p id="txt"></p>
-<canvas id="graphique"></canvas>
+        const ctx = document.getElementById('chart').getContext('2d');
+        const chart = new Chart(ctx, {{
+            type: 'line',
+            data: {{ labels: [], datasets: [{{ label: 'Infectés', data: [], borderColor: 'red', fill: false, pointRadius: 0 }}] }},
+            options: {{ animation: false, scales: {{ y: {{ beginAtZero: true }} }} }}
+        }});
 
-<div class="ctrls">
-    <button onclick="jouer()">Play/Pause</button>
-    <input type="range" id="curseur" style="flex:1" oninput="set_idx(this.value)">
-</div>
+        function set_idx(v) {{
+            idx = parseInt(v);
+            document.getElementById('txt').innerText = D[idx] + " — Infectés: " + V[idx].toLocaleString();
+            chart.data.labels = D.slice(0, idx + 1);
+            chart.data.datasets[0].data = V.slice(0, idx + 1);
+            chart.update('none');
+        }}
 
-<script>
+        function play() {{
+            if (timer) {{ clearInterval(timer); timer = null; }}
+            else {{
+                timer = setInterval(() => {{
+                    idx++;
+                    if (idx >= D.length) {{ clearInterval(timer); timer = null; return; }}
+                    document.getElementById('tick').value = idx;
+                    set_idx(idx);
+                }}, 50);
+            }}
+        }}
 
-//on nomme nos variables 
-var dates = {json.dumps(liste_dates)};
-var valeurs = {json.dumps(nb_infectes)};
-var nb_dates = dates.length;
-var idx = 0;
-var en_train_de_jouer = false;
-var minuterie = null;
-
-// creation graphique avk Chart.js
-var ctx = document.getElementById('graphique').getContext('2d');
-var graphique = new Chart(ctx, {{
-  type: 'line',
-  data: {{
-    labels: [],
-      datasets: [{{
-      label: 'Infectes',
-      data: [],
-      borderColor: 'red',
-      fill: false
-    }}]
-  }},
-  options: {{
-    animation: false,
-        scales: {{ y: {{ beginAtZero: true }} }}
-  }}
-}});
-
-// met a jour le graphique quand on bouge la souris
-function set_idx(v) {{
-idx = parseInt(v);
-  console.log('idx: ' + idx);
-  document.getElementById('txt').innerText = dates[idx] + " - infectes: " + valeurs[idx];
-  graphique.data.labels = dates.slice(0, idx + 1);
-    graphique.data.datasets[0].data = valeurs.slice(0, idx + 1);
-  graphique.update();
-}}
-
-//arrete la simulation quand on appuie sur play/pause
-function jouer()
-{{
-  if (minuterie) {{
-    clearInterval(minuterie);
-      minuterie = null;
-  }}
-  else {{
-    minuterie = setInterval(function() {{
-      idx++;
-      if (idx >= nb_dates) {{
-          clearInterval(minuterie);
-          minuterie = null;
-          return;
-      }}
-        document.getElementById('curseur').value = idx;
-      set_idx(idx);
-    }}, 50);
-  }}
-}}
-
-// faut mettre le max du range sinon ca marche pas
-document.getElementById('curseur').max = nb_dates - 1;
-set_idx(0);
-
-</script>
+        document.getElementById('tick').max = D.length - 1;
+        set_idx(0);
+    </script>
 </body>
-</html>
-"""
-    Path(fichier_html).write_text(html, encoding="utf-8")
-    print(f"le graphique infectés: {fichier_html}")
+</html>"""
+    Path(out_html).write_text(html, encoding="utf-8")
+    print(f"Graphique exporté : {out_html}")
+
+
+def tracer_seirdv(world_df, titre, out_html):
+    """Courbes SEIRD+V animées pour le pipeline simulation."""
+    df = world_df.sort_values("date")
+    dates = [str(d)[:10] for d in df["date"]]
+
+    # FIXE: lisser() était appelée avant d'être définie dans la version originale
+    def lisser(col):
+        return df[col].rolling(7, min_periods=1).mean().fillna(0).astype(int).tolist()
+
+    S = lisser("S")
+    E = lisser("E")
+    I = lisser("I")
+    R = lisser("R")
+    D = lisser("D")
+    V = lisser("V") if "V" in df.columns else [0] * len(df)
+
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>Courbes {titre}</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {{ font-family: sans-serif; margin: 20px; }}
+        canvas {{ max-height: 500px; }}
+        .ctrls {{ margin-top: 15px; display: flex; gap: 10px; align-items: center; }}
+        button {{ padding: 5px 14px; cursor: pointer; }}
+    </style>
+</head>
+<body>
+    <h3>{titre}</h3>
+    <p id="txt">Chargement...</p>
+    <canvas id="chart"></canvas>
+    <div class="ctrls">
+        <button onclick="play()">Play/Pause</button>
+        <input type="range" id="tick" style="flex:1" oninput="set_idx(this.value)">
+    </div>
+    <script>
+        const D  = {json.dumps(dates)};
+        const vS = {json.dumps(S)};
+        const vE = {json.dumps(E)};
+        const vI = {json.dumps(I)};
+        const vR = {json.dumps(R)};
+        const vD = {json.dumps(D)};
+        const vV = {json.dumps(V)};
+        let idx = 0, timer = null;
+
+        const ctx = document.getElementById('chart').getContext('2d');
+        const chart = new Chart(ctx, {{
+            type: 'line',
+            data: {{
+                labels: [],
+                datasets: [
+                    {{ label: 'S', data: [], borderColor: 'steelblue', fill: false, pointRadius: 0 }},
+                    {{ label: 'E', data: [], borderColor: 'orange',    fill: false, pointRadius: 0 }},
+                    {{ label: 'I', data: [], borderColor: 'red',       fill: false, pointRadius: 0 }},
+                    {{ label: 'R', data: [], borderColor: 'green',     fill: false, pointRadius: 0 }},
+                    {{ label: 'D', data: [], borderColor: 'purple',    fill: false, pointRadius: 0 }},
+                    {{ label: 'V', data: [], borderColor: 'teal',      fill: false, pointRadius: 0 }},
+                ]
+            }},
+            options: {{ animation: false, scales: {{ y: {{ beginAtZero: true }} }} }}
+        }});
+
+        function set_idx(v) {{
+            idx = parseInt(v);
+            document.getElementById('txt').innerText = D[idx]
+                + "  S:" + vS[idx].toLocaleString()
+                + "  E:" + vE[idx].toLocaleString()
+                + "  I:" + vI[idx].toLocaleString()
+                + "  R:" + vR[idx].toLocaleString()
+                + "  D:" + vD[idx].toLocaleString()
+                + "  V:" + vV[idx].toLocaleString();
+            chart.data.labels = D.slice(0, idx + 1);
+            chart.data.datasets[0].data = vS.slice(0, idx + 1);
+            chart.data.datasets[1].data = vE.slice(0, idx + 1);
+            chart.data.datasets[2].data = vI.slice(0, idx + 1);
+            chart.data.datasets[3].data = vR.slice(0, idx + 1);
+            chart.data.datasets[4].data = vD.slice(0, idx + 1);
+            chart.data.datasets[5].data = vV.slice(0, idx + 1);
+            chart.update('none');
+        }}
+
+        function play() {{
+            if (timer) {{ clearInterval(timer); timer = null; }}
+            else {{
+                timer = setInterval(() => {{
+                    idx++;
+                    if (idx >= D.length) {{ clearInterval(timer); timer = null; return; }}
+                    document.getElementById('tick').value = idx;
+                    set_idx(idx);
+                }}, 50);
+            }}
+        }}
+
+        document.getElementById('tick').max = D.length - 1;
+        set_idx(0);
+    </script>
+</body>
+</html>"""
+    Path(out_html).write_text(html, encoding="utf-8")
+    print(f"Courbes exportées : {out_html}")
 
 
 def out(p):
