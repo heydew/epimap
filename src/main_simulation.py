@@ -74,17 +74,23 @@ def lire_pays_valide(prompt, pays_valides):
 
 def saisir_maladie(pays_valides):
     print("\n=== CONFIGURATION DE LA MALADIE ===")
+    print("""
+Exemples de maladies de référence:
+  Grippe saisonnière : R0=1.3, incubation=2j, contagieux=5j, mortalité=0.001
+  COVID-19           : R0=2.5, incubation=5j, contagieux=10j, mortalité=0.01
+  Rougeole           : R0=15,  incubation=10j, contagieux=8j,  mortalité=0.002
+  Ebola              : R0=1.8, incubation=9j,  contagieux=7j,  mortalité=0.50
+""")
     nom = lire_str("Nom de la maladie: ")
-    r0 = lire_float("R0 - taux de reproduction (ex: 2.5): ")
-    jours_incubation = lire_float("Duree d'incubation en jours: ")
-    jours_contagieux = lire_float("Duree de contagiosite en jours: ")
-    taux_mortalite = lire_float("Taux de mortalite 0-1 (ex: 0.01): ")
+    r0 = lire_float("R0 - taux de reproduction (grippe=1.3, COVID=2.5, rougeole=15): ")
+    jours_incubation = lire_float("Durée d'incubation en jours (grippe=2, COVID=5, rougeole=10): ")
+    jours_contagieux = lire_float("Durée de contagiosité en jours (grippe=5, COVID=10, ebola=7): ")
+    taux_mortalite = lire_float("Taux de mortalité 0-1 (grippe=0.001, COVID=0.01, ebola=0.50): ")
     pays_origine = lire_pays_valide("Pays d'origine: ", pays_valides)
-    date_debut = lire_date("Date du premier infecte (YYYY-MM-DD): ")
+    date_debut = lire_date("Date du premier infecté (YYYY-MM-DD): ")
     date_fin = lire_date("Date de fin de simulation (YYYY-MM-DD): ")
-    infectes_initiaux = lire_int("Nombre d'infectes au depart: ")
-    vitesse_prop = lire_float("Vitesse de propagation internationale 0-1: ")
-    saisonnalite = lire_float("Saisonnalite 0-1: ")
+    infectes_initiaux = lire_int("Nombre d'infectés au départ (ex: 10): ")
+    vitesse_prop = lire_float("Vitesse de propagation internationale 0-1 (faible=0.1, normale=0.3, rapide=0.7): ")
 
     config = ConfigMaladie(
         nom=nom,
@@ -96,7 +102,7 @@ def saisir_maladie(pays_valides):
         date_debut=date_debut,
         infectes_initiaux=infectes_initiaux,
         vitesse_propagation=vitesse_prop,
-        saisonnalite=saisonnalite,
+        saisonnalite=0.0,
     )
     return config, date_fin
 

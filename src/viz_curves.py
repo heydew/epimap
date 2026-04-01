@@ -81,7 +81,6 @@ def tracer_seirdv(world_df, titre, out_html):
     def lisser(col):
         return df[col].rolling(7, min_periods=1).mean().fillna(0).astype(int).tolist()
 
-    S = lisser("S")
     E = lisser("E")
     I = lisser("I")
     R = lisser("R")
@@ -110,7 +109,6 @@ def tracer_seirdv(world_df, titre, out_html):
     </div>
     <script>
         const D  = {json.dumps(dates)};
-        const vS = {json.dumps(S)};
         const vE = {json.dumps(E)};
         const vI = {json.dumps(I)};
         const vR = {json.dumps(R)};
@@ -124,12 +122,11 @@ def tracer_seirdv(world_df, titre, out_html):
             data: {{
                 labels: [],
                 datasets: [
-                    {{ label: 'S', data: [], borderColor: 'steelblue', fill: false, pointRadius: 0 }},
-                    {{ label: 'E', data: [], borderColor: 'orange',    fill: false, pointRadius: 0 }},
-                    {{ label: 'I', data: [], borderColor: 'red',       fill: false, pointRadius: 0 }},
-                    {{ label: 'R', data: [], borderColor: 'green',     fill: false, pointRadius: 0 }},
-                    {{ label: 'D', data: [], borderColor: 'purple',    fill: false, pointRadius: 0 }},
-                    {{ label: 'V', data: [], borderColor: 'teal',      fill: false, pointRadius: 0 }},
+                    {{ label: 'E (Exposés)',   data: [], borderColor: 'orange',    fill: false, pointRadius: 0 }},
+                    {{ label: 'I (Infectés)',  data: [], borderColor: 'red',       fill: false, pointRadius: 0 }},
+                    {{ label: 'R (Rétablis)', data: [], borderColor: 'green',     fill: false, pointRadius: 0 }},
+                    {{ label: 'D (Décès)',    data: [], borderColor: 'purple',    fill: false, pointRadius: 0 }},
+                    {{ label: 'V (Vaccinés)', data: [], borderColor: 'teal',      fill: false, pointRadius: 0 }},
                 ]
             }},
             options: {{ animation: false, scales: {{ y: {{ beginAtZero: true }} }} }}
@@ -138,19 +135,17 @@ def tracer_seirdv(world_df, titre, out_html):
         function set_idx(v) {{
             idx = parseInt(v);
             document.getElementById('txt').innerText = D[idx]
-                + "  S:" + vS[idx].toLocaleString()
                 + "  E:" + vE[idx].toLocaleString()
                 + "  I:" + vI[idx].toLocaleString()
                 + "  R:" + vR[idx].toLocaleString()
                 + "  D:" + vD[idx].toLocaleString()
                 + "  V:" + vV[idx].toLocaleString();
             chart.data.labels = D.slice(0, idx + 1);
-            chart.data.datasets[0].data = vS.slice(0, idx + 1);
-            chart.data.datasets[1].data = vE.slice(0, idx + 1);
-            chart.data.datasets[2].data = vI.slice(0, idx + 1);
-            chart.data.datasets[3].data = vR.slice(0, idx + 1);
-            chart.data.datasets[4].data = vD.slice(0, idx + 1);
-            chart.data.datasets[5].data = vV.slice(0, idx + 1);
+            chart.data.datasets[0].data = vE.slice(0, idx + 1);
+            chart.data.datasets[1].data = vI.slice(0, idx + 1);
+            chart.data.datasets[2].data = vR.slice(0, idx + 1);
+            chart.data.datasets[3].data = vD.slice(0, idx + 1);
+            chart.data.datasets[4].data = vV.slice(0, idx + 1);
             chart.update('none');
         }}
 
