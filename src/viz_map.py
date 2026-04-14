@@ -25,12 +25,12 @@ MAP_PAYS = {
 
 
 def choropleth_timelapse(data, geojson_path, out_file):
-    """Carte choroplèthe pour le pipeline COVID réel."""
+
     with open(geojson_path, "r", encoding="utf-8") as f:
         geo = json.load(f)
 
     df = data.copy()
-    # FIXE: la colonne s'appelle "pays" dans ce pipeline (pas "country")
+    # changement ref
     col_pays = "pays" if "pays" in df.columns else "country"
     df["name"] = df[col_pays].replace(MAP_PAYS)
     df["pct"] = (df["I"] / df["population"].replace(0, 1) * 100).clip(0, 100)
@@ -44,7 +44,7 @@ def choropleth_timelapse(data, geojson_path, out_file):
 
 
 def carte_simulation(data: pd.DataFrame, geojson_path: str, out_file: str, titre: str = "Simulation"):
-    """Carte choroplèthe pour le pipeline simulation SEIRD+V."""
+
     with open(geojson_path, "r", encoding="utf-8") as f:
         geo = json.load(f)
 

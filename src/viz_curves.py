@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 def plot_sir_animated(data, titre, out_html):
-    """Courbes SIR animées pour le pipeline COVID réel."""
+
     df = data.sort_values("date")
     dates = [str(d)[:10] for d in df["date"]]
 
@@ -73,11 +73,11 @@ def plot_sir_animated(data, titre, out_html):
 
 
 def tracer_seirdv(world_df, titre, out_html):
-    """Courbes SEIRD+V animées pour le pipeline simulation."""
+
     df = world_df.sort_values("date")
     dates = [str(d)[:10] for d in df["date"]]
 
-    # FIXE: lisser() était appelée avant d'être définie dans la version originale
+    #  lisser()
     def lisser(col):
         return df[col].rolling(7, min_periods=1).mean().fillna(0).astype(int).tolist()
 

@@ -43,10 +43,7 @@ def get_pop(p=None, codes=None):
 
 
 def run_sir(df, g=0.1):
-    """
-    Reconstruit S/I/R depuis les données cumulatives réelles.
-    g = taux de guérison journalier (défaut 0.1 = 10 jours de contagiosité)
-    """
+
     resultats = []
     for pays, groupe in df.groupby("pays"):
         groupe = groupe.sort_values("date").copy()

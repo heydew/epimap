@@ -31,10 +31,7 @@ class Evenement:
 
 
 class Confinement(Evenement):
-    """
-    Réduit beta pendant N jours puis le restaure.
-    reduction : 0–1, ex: 0.6 = -60% de contagiosité
-    """
+
 
     def __init__(self, date: str, reduction: float, duree_jours: int, pays: Optional[str] = None):
         super().__init__(date, pays)
@@ -60,7 +57,7 @@ class Confinement(Evenement):
 
 
 class Vaccination(Evenement):
-    """Démarre la vaccination à partir de la date donnée."""
+
 
     def __init__(self, date: str, taux_quotidien: float, pays: Optional[str] = None):
         super().__init__(date, pays)
@@ -72,7 +69,7 @@ class Vaccination(Evenement):
 
 
 class NouveauVariant(Evenement):
-    """Modifie le R0 et/ou le taux de mortalité."""
+
 
     def __init__(self, date: str, nouveau_r0: Optional[float] = None,
                  nouveau_ifr: Optional[float] = None, pays: Optional[str] = None):
@@ -90,7 +87,7 @@ class NouveauVariant(Evenement):
 
 
 class MesuresSanitaires(Evenement):
-    """Réduction permanente de beta (masques, distanciation...)."""
+
 
     def __init__(self, date: str, reduction: float, pays: Optional[str] = None):
         super().__init__(date, pays)
@@ -103,7 +100,7 @@ class MesuresSanitaires(Evenement):
 
 
 class LeveeRestrictions(Evenement):
-    """Annule tous les overrides de beta."""
+
 
     def __init__(self, date: str, pays: Optional[str] = None):
         super().__init__(date, pays)
@@ -114,7 +111,7 @@ class LeveeRestrictions(Evenement):
 
 
 class FermetureFrontieres(Evenement):
-    """Réduit la propagation inter-pays pendant N jours."""
+
 
     def __init__(self, date: str, duree_jours: int, pays: Optional[str] = None):
         super().__init__(date, pays)
