@@ -18,18 +18,18 @@ HUBS_AERIENS = {
 
 
 def haversine(c1: Tuple[float, float], c2: Tuple[float, float]) -> float:
-
+    """Distance en km entre deux coordonnées (lat, lon)."""
     R = 6371
     lat1, lon1 = math.radians(c1[0]), math.radians(c1[1])
     lat2, lon2 = math.radians(c2[0]), math.radians(c2[1])
     dlat, dlon = lat2 - lat1, lon2 - lon1
     a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
-
+    # FIXE: return manquant dans la version originale
     return R * 2 * math.asin(math.sqrt(a))
 
 
 def _extraire_coords(geom: dict) -> list:
-
+    """Extrait toutes les coordonnées d'une géométrie GeoJSON."""
     t = geom.get("type", "")
     if t == "Polygon":
         return geom["coordinates"][0]
@@ -42,7 +42,7 @@ def _extraire_coords(geom: dict) -> list:
 
 
 def lire_centroides_geojson(geojson_path: str) -> Dict[str, Tuple[float, float]]:
-
+    """Retourne {nom_pays: (lat, lon)} depuis le GeoJSON."""
     with open(geojson_path, "r", encoding="utf-8") as f:
         geo = json.load(f)
 
@@ -61,7 +61,7 @@ def lire_centroides_geojson(geojson_path: str) -> Dict[str, Tuple[float, float]]
 
 @dataclass
 class ConfigMaladie:
-
+    """Paramètres de la maladie définis par l'utilisateur."""
     nom: str
     r0: float
     jours_incubation: float
@@ -75,7 +75,7 @@ class ConfigMaladie:
 
 
 class MoteurSEIRDV:
-
+    """Simule une épidémie SEIRD+V sur tous les pays."""
 
     def __init__(self, config: ConfigMaladie, population_df: pd.DataFrame, geojson_path: str):
         self.cfg = config
@@ -194,7 +194,7 @@ class MoteurSEIRDV:
             self.etats[p_dst]["E"] += seed
 
     def simuler(self, plage_dates: pd.DatetimeIndex, evenements: list, graine: int = 42) -> pd.DataFrame:
-
+        """Lance la simulation. Retourne un DataFrame (country, date, S, E, I, R, D, V, population)."""
         rng = np.random.default_rng(graine)
         date_debut = pd.Timestamp(self.cfg.date_debut)
         resultats = []
@@ -203,9 +203,6 @@ class MoteurSEIRDV:
             for ev in evenements:
                 ev.appliquer(date, self)
 
-            if date >= date_debut:
-                self._propager_entre_pays(rng)
-
             nouveaux_etats = {}
             for pays in self.pays:
                 if date < date_debut and pays != self.cfg.pays_origine:
@@ -213,6 +210,9 @@ class MoteurSEIRDV:
                 else:
                     nouveaux_etats[pays] = self._etape_pays(pays, date)
             self.etats = nouveaux_etats
+
+            if date >= date_debut:
+                self._propager_entre_pays(rng)
 
             for pays in self.pays:
                 st = self.etats[pays]

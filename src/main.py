@@ -15,7 +15,7 @@ if __name__ == "__main__":
     donnees_pop = get_pop(codes=set(donnees_epi["code"].unique()))
 
     # merge sur "code" (ISO)
-    df = donnees_epi.merge(donnees_pop, on="code").dropna(subset=["pop"])
+    df = donnees_epi.merge(donnees_pop[["code", "pop"]], on="code").dropna(subset=["pop"])
     df = df.rename(columns={"pop": "population"})
 
     donnees = run_sir(df)

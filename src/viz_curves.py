@@ -81,11 +81,11 @@ def tracer_seirdv(world_df, titre, out_html):
     def lisser(col):
         return df[col].rolling(7, min_periods=1).mean().fillna(0).astype(int).tolist()
 
-    E = lisser("E")
-    I = lisser("I")
-    R = lisser("R")
-    D = lisser("D")
-    V = lisser("V") if "V" in df.columns else [0] * len(df)
+    vE = lisser("E")
+    vI = lisser("I")
+    vR = lisser("R")
+    vD = lisser("D")
+    vV = lisser("V") if "V" in df.columns else [0] * len(df)
 
     html = f"""<!DOCTYPE html>
 <html>
@@ -109,11 +109,11 @@ def tracer_seirdv(world_df, titre, out_html):
     </div>
     <script>
         const D  = {json.dumps(dates)};
-        const vE = {json.dumps(E)};
-        const vI = {json.dumps(I)};
-        const vR = {json.dumps(R)};
-        const vD = {json.dumps(D)};
-        const vV = {json.dumps(V)};
+        const vE = {json.dumps(vE)};
+        const vI = {json.dumps(vI)};
+        const vR = {json.dumps(vR)};
+        const vD = {json.dumps(vD)};
+        const vV = {json.dumps(vV)};
         let idx = 0, timer = null;
 
         const ctx = document.getElementById('chart').getContext('2d');
