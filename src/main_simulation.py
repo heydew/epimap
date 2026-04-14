@@ -11,7 +11,7 @@ from scenarios import (
 import viz_curves
 import viz_map
 
-# Configuration des chemins
+# Configuration des chemins pour le out
 OUT = Path(__file__).resolve().parents[1] / "out"
 OUT.mkdir(exist_ok=True)
 GEO = Path(__file__).resolve().parents[1] / "data" / "world-countries.geojson"
@@ -63,7 +63,7 @@ def lire_pays_valide(prompt, pays_valides):
         val = input(prompt).strip()
         if val in pays_valides:
             return val
-        # Recherche insensible à la casse
+        # Recherche du truc
         match = next((p for p in pays_valides if p.lower() == val.lower()), None)
         if match:
             return match
@@ -73,20 +73,14 @@ def lire_pays_valide(prompt, pays_valides):
 
 
 def saisir_maladie(pays_valides):
-    print("\n=== CONFIGURATION DE LA MALADIE ===")
-    print("""
-Exemples de maladies de référence:
-  Grippe saisonnière : R0=1.3, incubation=2j, contagieux=5j, mortalité=0.001
-  COVID-19           : R0=2.5, incubation=5j, contagieux=10j, mortalité=0.01
-  Rougeole           : R0=15,  incubation=10j, contagieux=8j,  mortalité=0.002
-  Ebola              : R0=1.8, incubation=9j,  contagieux=7j,  mortalité=0.50
-""")
+    print("On crée maladie custom:")
+
     nom = lire_str("Nom de la maladie: ")
-    r0 = lire_float("R0 - taux de reproduction (grippe=1.3, COVID=2.5, rougeole=15): ")
+    r0 = lire_float("R0: taux de reproduction(grippe=1.3 COVID=2.5,rougeole=15): ")
     jours_incubation = lire_float("Durée d'incubation en jours (grippe=2, COVID=5, rougeole=10): ")
     jours_contagieux = lire_float("Durée de contagiosité en jours (grippe=5, COVID=10, ebola=7): ")
     taux_mortalite = lire_float("Taux de mortalité 0-1 (grippe=0.001, COVID=0.01, ebola=0.50): ")
-    pays_origine = lire_pays_valide("Pays d'origine: ", pays_valides)
+    pays_origine = lire_pays_valide("Pays d'origine:", pays_valides)
     date_debut = lire_date("Date du premier infecté (YYYY-MM-DD): ")
     date_fin = lire_date("Date de fin de simulation (YYYY-MM-DD): ")
     infectes_initiaux = lire_int("Nombre d'infectés au départ (ex: 10): ")
@@ -108,12 +102,12 @@ Exemples de maladies de référence:
 
 
 TYPES_EVENEMENTS = {
-    "1": "Confinement",
-    "2": "Vaccination",
-    "3": "Nouveau variant",
-    "4": "Mesures sanitaires",
-    "5": "Levee des restrictions",
-    "6": "Fermeture des frontieres",
+    "1":"Confinement",
+    "2":"Vaccination",
+    "3":"Nouveau variant",
+    "4":"Mesures sanitaires",
+    "5":"Levee des restrictions",
+    "6":"Fermeture des frontieres",
 }
 
 
@@ -171,9 +165,9 @@ def saisir_evenement(pays_valides):
 
 
 def saisir_evenements(pays_valides):
-    print("\n=== EVENEMENTS ===")
+    print(" Création d'evenements:")
     evenements = []
-    while lire_oui_non("Ajouter un evenement?"):
+    while lire_oui_non(" Veux tu ajouter un evenement?"):
         ev = saisir_evenement(pays_valides)
         if ev:
             evenements.append(ev)
@@ -189,11 +183,11 @@ if __name__ == "__main__":
     pop = pop[pop["pop"] > 100_000].copy()
     pays_valides = set(pop["pays"].unique())
 
-    # Saisie utilisateur
+    # saisie de l'utilisateur
     maladie, date_fin = saisir_maladie(pays_valides)
     evenements = saisir_evenements(pays_valides)
 
-    # Calcul de la plage temporelle
+#calcul de la plage temporelle
     plage = pd.date_range(start=maladie.date_debut, end=date_fin, freq="D")
     print(f"\nSimulation {maladie.nom} — {len(pop)} pays, {len(plage)} jours...")
 
