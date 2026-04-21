@@ -1,7 +1,7 @@
 import pandas as pd
 from pathlib import Path
 
-# Importations locales (assure-toi que ces fichiers existent dans ton projet)
+# Importations locales
 from io_data import get_pop
 from model import ConfigMaladie, MoteurSEIRDV
 from scenarios import (

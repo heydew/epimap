@@ -31,7 +31,7 @@ def get_pop(p=None, codes=None):
     df = pd.read_csv(p)
 
     df.columns = [c.lower().strip() for c in df.columns]
-    # FIXE: "country name" → "pays" pour que le merge dans main.py fonctionne
+
     df = df.rename(columns={"country name": "pays", "country code": "code", "value": "pop"})
 
     if codes:
@@ -63,7 +63,7 @@ def run_sir(df, g=0.1):
         for k in range(1, len(groupe)):
             gueris = g * infectes[k - 1]
             infectes[k] = max(0.0, infectes[k - 1] + nouveaux[k] - gueris)
-            # cap R à N-I pour conserver la masse
+            # cap R à N-I pour conserver la pop
             retablis[k] = min(retablis[k - 1] + gueris, nb_pop - infectes[k])
 
         groupe["I"] = infectes

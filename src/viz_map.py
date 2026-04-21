@@ -3,24 +3,63 @@ import pandas as pd
 from pathlib import Path
 import webbrowser
 
-# noms CSV
+
 MAP_PAYS = {
-    "United States":                "United States of America",
-    "Congo":                        "Republic of the Congo",
-    "Democratic Republic of Congo": "Democratic Republic of the Congo",
-    "Tanzania":                     "United Republic of Tanzania",
-    "Ivory Coast":                  "Côte d'Ivoire",
-    "Czech Republic":               "Czechia",
-    "South Korea":                  "South Korea",
-    "North Korea":                  "North Korea",
-    "Laos":                         "Lao PDR",
-    "Syria":                        "Syrian Arab Republic",
-    "Russia":                       "Russia",
-    "Iran":                         "Iran",
-    "Vietnam":                      "Vietnam",
-    "East Timor":                   "Timor-Leste",
-    "Eswatini":                     "eSwatini",
-    "Cape Verde":                   "Cabo Verde",
+    # noms COVID CSV
+    "United States":                        "United States of America",
+    "Congo":                                "Republic of the Congo",
+    "Democratic Republic of Congo":         "Democratic Republic of the Congo",
+    "Tanzania":                             "United Republic of Tanzania",
+    "Ivory Coast":                          "Côte d'Ivoire",
+    "Czech Republic":                       "Czechia",
+    "South Korea":                          "South Korea",
+    "North Korea":                          "North Korea",
+    "Laos":                                 "Lao PDR",
+    "Syria":                                "Syrian Arab Republic",
+    "Russia":                               "Russia",
+    "Iran":                                 "Iran",
+    "Vietnam":                              "Vietnam",
+    "East Timor":                           "Timor-Leste",
+    "Eswatini":                             "eSwatini",
+    "Cape Verde":                           "Cabo Verde",
+    # noms population.csv en noms GeoJSON
+    "United States of America":             "United States of America",
+    "Russian Federation":                   "Russia",
+    "Iran, Islamic Rep.":                   "Iran",
+    "Iran (Islamic Republic of)":           "Iran",
+    "Korea, Rep.":                          "South Korea",
+    "Korea, Dem. People's Rep.":            "North Korea",
+    "Viet Nam":                             "Vietnam",
+    "Lao PDR":                              "Lao PDR",
+    "Syrian Arab Republic":                 "Syrian Arab Republic",
+    "Congo, Rep.":                          "Republic of the Congo",
+    "Congo, Dem. Rep.":                     "Democratic Republic of the Congo",
+    "Tanzania":                             "United Republic of Tanzania",
+    "Cote d'Ivoire":                        "Côte d'Ivoire",
+    "Cabo Verde":                           "Cabo Verde",
+    "Timor-Leste":                          "Timor-Leste",
+    "Egypt, Arab Rep.":                     "Egypt",
+    "Venezuela, RB":                        "Venezuela",
+    "Yemen, Rep.":                          "Yemen",
+    "Kyrgyz Republic":                      "Kyrgyzstan",
+    "Slovak Republic":                      "Slovakia",
+    "Czechia":                              "Czechia",
+    "Czech Republic":                       "Czechia",
+    "Bahamas, The":                         "The Bahamas",
+    "Gambia, The":                          "Gambia",
+    "West Bank and Gaza":                   "West Bank",
+    "Micronesia, Fed. Sts.":               "Federated States of Micronesia",
+    "St. Lucia":                            "Saint Lucia",
+    "St. Vincent and the Grenadines":       "Saint Vincent and the Grenadines",
+    "St. Kitts and Nevis":                  "Saint Kitts and Nevis",
+    "Sao Tome and Principe":               "São Tomé and Príncipe",
+    "Brunei Darussalam":                    "Brunei",
+    "Myanmar":                              "Myanmar",
+    "Bolivia":                              "Bolivia",
+    "Moldova":                              "Moldova",
+    "Macedonia, FYR":                       "Macedonia",
+    "North Macedonia":                      "Macedonia",
+    "Bosnia and Herzegovina":              "Bosnia and Herzegovina",
 }
 
 
@@ -40,7 +79,7 @@ def choropleth_timelapse(data, geojson_path, out_file):
     dates_list = sorted(pivot.columns.tolist())
     map_data = pivot.to_dict(orient="index")
 
-    _ecrire_carte_html(geo, map_data, dates_list, "COVID-19 — Évolution mondiale", out_file)
+    _ecrire_carte_html(geo, map_data, dates_list, "COVID-19: Évolution mondiale", out_file)
 
 
 def carte_simulation(data: pd.DataFrame, geojson_path: str, out_file: str, titre: str = "Simulation"):
@@ -51,9 +90,10 @@ def carte_simulation(data: pd.DataFrame, geojson_path: str, out_file: str, titre
     df = data.copy()
     df["name"] = df["country"].replace(MAP_PAYS)
     df["pct"] = (df["I"] / df["population"].replace(0, 1) * 100).clip(0, 100)
-    df["month"] = df["date"].dt.strftime("%Y-%m")
+    # Agregation par semaine
+    df["semaine"] = df["date"].dt.to_period("W").dt.start_time.dt.strftime("%Y-%m-%d")
 
-    pivot = df.groupby(["month", "name"])["pct"].mean().unstack(level=0).fillna(0)
+    pivot = df.groupby(["semaine", "name"])["pct"].mean().unstack(level=0).fillna(0)
     dates_list = sorted(pivot.columns.tolist())
     map_data = pivot.to_dict(orient="index")
 
@@ -96,12 +136,13 @@ def _ecrire_carte_html(geo, map_data, dates_list, titre, out_file):
         L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png').addTo(map);
 
         function couleur(p) {{
-            if (p > 1.0)  return '#b71c1c';
-            if (p > 0.5)  return '#e53935';
-            if (p > 0.1)  return '#fb8c00';
-            if (p > 0.05) return '#fdd835';
-            if (p > 0.01) return '#aed581';
-            return '#eeeeee';
+            if (p > 1.0)  return 'Darkred';
+            if (p > 0.5)  return 'red';
+            if (p > 0.1)  return 'darkorange';
+            if (p > 0.05) return 'gold';
+            if (p > 0.01)  return 'yellow';
+            if (p >= 0.001) return 'yellowgreen';
+            return 'lightgray';
         }}
 
         function majCarte(n) {{
@@ -131,7 +172,7 @@ def _ecrire_carte_html(geo, map_data, dates_list, titre, out_file):
                 timer = setInterval(() => {{
                     if (idx >= DATES.length - 1) {{ clearInterval(timer); timer = null; return; }}
                     majCarte(idx + 1);
-                }}, 300);
+                }}, 700);
             }}
         }}
 
