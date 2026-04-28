@@ -20,7 +20,7 @@ def get_epi(p=None):
     df = df.rename(columns=colonnes)
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
 
-    # enleve les agregats regionaux (pas de code ISO = pas un vrai pays)
+    #  pas de code ISO = pas un vrai pays
     df = df[df["code"].notna() & (df["code"] != "")]
     return df.sort_values(["pays", "date"]).fillna(0)
 
@@ -63,7 +63,7 @@ def run_sir(df, g=0.1):
         for k in range(1, len(groupe)):
             gueris = g * infectes[k - 1]
             infectes[k] = max(0.0, infectes[k - 1] + nouveaux[k] - gueris)
-            # cap R à N-I pour conserver la pop
+            # max a R à N-I pour conserver la pop
             retablis[k] = min(retablis[k - 1] + gueris, nb_pop - infectes[k])
 
         groupe["I"] = infectes

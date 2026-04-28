@@ -79,7 +79,7 @@ def choropleth_timelapse(data, geojson_path, out_file):
     dates_list = sorted(pivot.columns.tolist())
     map_data = pivot.to_dict(orient="index")
 
-    _ecrire_carte_html(geo, map_data, dates_list, "COVID-19: Évolution mondiale", out_file)
+    _ecrire_carte_html(geo, map_data, dates_list, "COVID-19 dans le mundo", out_file)
 
 
 def carte_simulation(data: pd.DataFrame, geojson_path: str, out_file: str, titre: str = "Simulation"):
@@ -90,7 +90,7 @@ def carte_simulation(data: pd.DataFrame, geojson_path: str, out_file: str, titre
     df = data.copy()
     df["name"] = df["country"].replace(MAP_PAYS)
     df["pct"] = (df["I"] / df["population"].replace(0, 1) * 100).clip(0, 100)
-    # Agregation par semaine
+    #  par semaine
     df["semaine"] = df["date"].dt.to_period("W").dt.start_time.dt.strftime("%Y-%m-%d")
 
     pivot = df.groupby(["semaine", "name"])["pct"].mean().unstack(level=0).fillna(0)
@@ -141,7 +141,7 @@ def _ecrire_carte_html(geo, map_data, dates_list, titre, out_file):
             if (p > 0.1)  return 'darkorange';
             if (p > 0.05) return 'gold';
             if (p > 0.01)  return 'yellow';
-            if (p >= 0.001) return 'yellowgreen';
+            if (p >= 0.0001) return 'yellowgreen';
             return 'lightgray';
         }}
 

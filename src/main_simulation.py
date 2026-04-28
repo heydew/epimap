@@ -67,7 +67,7 @@ def lire_pays_valide(prompt, pays_valides):
         match = next((p for p in pays_valides if p.lower() == val.lower()), None)
         if match:
             return match
-        print(f" Pays introuvable. Vérifie l'orthographe (ex: 'France', 'China')")
+        print(f" Pays introuvable. Vérifie l'orthographe chef (ex: 'France', 'China')")
 
 
 
@@ -83,7 +83,7 @@ def saisir_maladie(pays_valides):
     pays_origine = lire_pays_valide("Pays d'origine:", pays_valides)
     date_debut = lire_date("Date du premier infecté (YYYY-MM-DD): ")
     date_fin = lire_date("Date de fin de simulation (YYYY-MM-DD): ")
-    infectes_initiaux = lire_int("Nombre d'infectés au départ (ex: 10): ")
+    infectes_initiaux = lire_int("Nombre d'infectés au départ (ex: 67): ")
     vitesse_prop = lire_float("Vitesse de propagation internationale 0-1 (faible=0.1, normale=0.3, rapide=0.7): ")
 
     config = ConfigMaladie(
@@ -179,35 +179,35 @@ def saisir_evenements(pays_valides):
 if __name__ == "__main__":
     print("Chargement de la population...")
     pop = get_pop(p=str(POP))
-    # On filtre pour ne garder que les pays significatifs pour la simulation
+    # On filtre pour avoir juste les gros pays
     pop = pop[pop["pop"] > 100_000].copy()
     pays_valides = set(pop["pays"].unique())
 
-    # saisie de l'utilisateur
+    # saisie utilisateur
     maladie, date_fin = saisir_maladie(pays_valides)
     evenements = saisir_evenements(pays_valides)
 
-#calcul de la plage temporelle
+#calcul duree
     plage = pd.date_range(start=maladie.date_debut, end=date_fin, freq="D")
-    print(f"\nSimulation {maladie.nom} — {len(pop)} pays, {len(plage)} jours...")
+    print(f"\nSimulation {maladie.nom} — {len(pop)} pays, {len(plage)} jours")
 
-    # Initialisation du moteur et simulation
+    # ca commence
     moteur = MoteurSEIRDV(maladie, pop, str(GEO))
     data = moteur.simuler(plage, evenements)
 
-    # Aggrégation mondiale pour les statistiques
+    # regroupe donne monde
     world = data.groupby("date")[["S", "E", "I", "R", "D", "V"]].sum().reset_index()
 
     print(f"Pic infectes: {world['I'].max():,.0f} personnes")
     print(f"Deces totaux: {world['D'].iloc[-1]:,.0f}")
 
-    # Export des visualisations
+    # Export
     f_courbes = str(OUT / "simulation_courbes.html")
     f_carte = str(OUT / "simulation_carte.html")
 
     viz_curves.tracer_seirdv(world, maladie.nom, f_courbes)
     viz_map.carte_simulation(data, str(GEO), f_carte, maladie.nom)
 
-    print("\nSimulation terminée. Ouverture des résultats...")
+    print("\nSimulation terminée. Ouverture des résultats:")
     viz_curves.out(f_courbes)
     viz_map.out(f_carte)

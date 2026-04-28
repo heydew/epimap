@@ -1,5 +1,3 @@
-
-
 import math
 import json
 import numpy as np
@@ -7,11 +5,6 @@ import pandas as pd
 from dataclasses import dataclass
 from typing import Optional, Dict, Tuple
 
-
-HUBS_AERIENS = {
-    "United States of America", "China", "United Kingdom", "Germany", "France",
-    "United Arab Emirates", "Singapore", "Japan", "Netherlands", "Turkey"
-}
 
 
 def haversine(c1: Tuple[float, float], c2: Tuple[float, float]) -> float:
@@ -101,11 +94,9 @@ class MoteurSEIRDV:
                 coord2 = self.centroides.get(p2)
                 if coord1 and coord2:
                     dist = haversine(coord1, coord2)
-                    score_geo = math.exp(-dist / 5000)
+                    self.conn[p1][p2] = math.exp(-dist / 5000)
                 else:
-                    score_geo = 0.01
-                bonus_hub = 2.5 if (p1 in HUBS_AERIENS or p2 in HUBS_AERIENS) else 1.0
-                self.conn[p1][p2] = score_geo * bonus_hub
+                    self.conn[p1][p2] = 0.01
 
         for p1 in self.pays:
             total = sum(self.conn[p1].values())
@@ -134,9 +125,7 @@ class MoteurSEIRDV:
         if self.cfg.saisonnalite > 0:
             facteur = 1 + self.cfg.saisonnalite * math.sin(2 * math.pi * date.day_of_year / 365)
             base *= facteur
-        # En modele discret journalier, beta > 1 est instable : un seul infecte
-        # exposerait plus que 100% des susceptibles en un pas de temps.
-        # On plafonne a 0.99 pour la stabilite numerique.
+
         return min(base, 0.99)
 
     def _etape_pays(self, pays: str, date: pd.Timestamp) -> Dict[str, float]:
@@ -148,16 +137,14 @@ class MoteurSEIRDV:
         S, E, I, R, D, V = st["S"], st["E"], st["I"], st["R"], st["D"], st["V"]
         beta = self._get_beta(pays, date)
 
-        # Sous-echantillonnage : on divise le pas journalier en plusieurs sous-etapes
-        # pour stabiliser le modele discret quand beta ou gamma est grand.
-        # Le nombre de sous-pas est determine automatiquement.
+#vaccination
         nb_sous_pas = max(1, math.ceil(max(beta, self.sigma, self.gamma) / 0.25))
         dt = 1.0 / nb_sous_pas
 
         taux_vax = self.taux_vaccination[pays]
 
         for _ in range(nb_sous_pas):
-            # Flux hors de S
+            # S
             exp_brut = beta * S * I / n * dt
             vax_brut = taux_vax * S * dt
             total_sortie_S = exp_brut + vax_brut
@@ -166,11 +153,11 @@ class MoteurSEIRDV:
                 exp_brut *= facteur
                 vax_brut *= facteur
 
-            # Flux hors de E
+            #E
             inf_brut = self.sigma * E * dt
             inf_brut = min(inf_brut, E)
 
-            # Flux hors de I
+            # I
             ret_brut = self.gamma * (1 - self.cfg.taux_mortalite) * I * dt
             dec_brut = self.gamma * self.cfg.taux_mortalite * I * dt
             total_sortie_I = ret_brut + dec_brut
@@ -186,7 +173,7 @@ class MoteurSEIRDV:
             D = max(D + dec_brut, 0)
             V = max(V + vax_brut, 0)
 
-        # Normalisation: S+E+I+R+V = pop - D
+        # S+E+I+R+V = pop - D
         pop_vivante = S + E + I + R + V
         pop_cible   = max(n - D, 0)
         if pop_vivante > 0 and abs(pop_vivante - pop_cible) > 0.5:
@@ -195,32 +182,41 @@ class MoteurSEIRDV:
         return {"S": S, "E": E, "I": I, "R": R, "D": D, "V": V, "pop": n}
 
     def _propager_entre_pays(self, rng: np.random.Generator):
-        seeds: Dict[str, float] = {}
+        #compter combien partent
+        seeds: Dict[str, float] = {}   # = total arrivant dans pays dst
+
         for p_src in self.pays:
             I_src = self.etats[p_src]["I"]
             pop_src = self.etats[p_src]["pop"]
             if I_src < 1 or pop_src <= 0:
                 continue
-            # Nombre de voyageurs infectes
-            # multipliee par le taux d'infectes
-            # vitesse_propagation.
+
             taux_voyage = self.cfg.vitesse_propagation * 1e-5
             lambda_voyage = pop_src * taux_voyage * (I_src / pop_src)
             voyageurs = int(rng.poisson(lambda_voyage))
             if voyageurs == 0:
                 continue
+            # calma calma
+            voyageurs = min(voyageurs, int(I_src))
+
             poids = np.array([self.conn[p_src].get(p2, 0) for p2 in self.pays])
             if poids.sum() == 0:
                 continue
             poids /= poids.sum()
             destinations = rng.choice(len(self.pays), size=voyageurs, p=poids)
+
+            partis = 0
             for idx in destinations:
                 p_dst = self.pays[idx]
                 if p_dst != p_src:
                     seeds[p_dst] = seeds.get(p_dst, 0) + 1
+                    partis += 1
+
+            # elever infectés
+            if partis > 0:
+                self.etats[p_src]["I"] = max(self.etats[p_src]["I"] - partis, 0)
 
         for p_dst, n_seed in seeds.items():
-            # Relire S a chaque fois
             s_dispo = self.etats[p_dst]["S"]
             seed = min(n_seed, s_dispo)
             if seed <= 0:
