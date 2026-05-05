@@ -179,15 +179,25 @@ def saisir_evenements(pays_valides):
 if __name__ == "__main__":
     print("Chargement de la population...")
     pop = get_pop(p=str(POP))
-    # On filtre pour avoir juste les gros pays
     pop = pop[pop["pop"] > 100_000].copy()
     pays_valides = set(pop["pays"].unique())
 
-    # saisie utilisateur
-    maladie, date_fin = saisir_maladie(pays_valides)
-    evenements = saisir_evenements(pays_valides)
+    from scenarios_predefinis import SCENARIOS
+    print("\nMode:")
+    print(" 0. Scenario personnalise")
+    for k, (nom, _) in SCENARIOS.items():
+        print(f" {k}. {nom}")
+    choix = input("\nChoix: ").strip()
 
-#calcul duree
+    if choix in SCENARIOS:
+        _, fn = SCENARIOS[choix]
+        maladie, date_fin, evenements = fn()
+        print(f"Scenario charge : {maladie.nom}")
+    else:
+        maladie, date_fin = saisir_maladie(pays_valides)
+        evenements = saisir_evenements(pays_valides)
+
+    #calcul duree
     plage = pd.date_range(start=maladie.date_debut, end=date_fin, freq="D")
     print(f"\nSimulation {maladie.nom} — {len(pop)} pays, {len(plage)} jours")
 

@@ -178,26 +178,42 @@ class MoteurSEIRDV:
     def _propager_entre_pays(self, rng: np.random.Generator):
         seeds: Dict[str, float] = {}
         n_pays = max(len(self.pays), 1)
+
+        # Total infectes dans le monde -> taux de base global
+        total_infectes = sum(self.etats[p]["I"] for p in self.pays)
+        pop_mondiale = sum(self.etats[p]["pop"] for p in self.pays)
+        # Taux de base: chaque pays recoit un tout petit flux proportionnel
+        # aux infectes mondiaux, independamment de la distance
+        # ~0.0001% des infectes mondiaux se dispersent uniformement
+        taux_base_global = self.cfg.vitesse_propagation * 0.00005 / max(n_pays, 1)
+
         for p_src in self.pays:
             I_src = self.etats[p_src]["I"]
             if I_src < 1:
                 continue
             n_src = self.etats[p_src]["pop"]
-            # taux divise par n_pays: propagation totale constante peu importe le nb de pays
-            taux_voyage = self.cfg.vitesse_propagation / (1000 * n_pays)
-            max_voyageurs = max(1, n_src * 0.00001)
-            voyageurs = min(rng.poisson(I_src * taux_voyage), max_voyageurs)
-            if voyageurs == 0:
-                continue
-            poids = np.array([self.conn[p_src].get(p2, 0) for p2 in self.pays])
-            if poids.sum() == 0:
-                continue
-            poids /= poids.sum()
-            destinations = rng.choice(len(self.pays), size=int(voyageurs), p=poids)
-            for idx in destinations:
-                p_dst = self.pays[idx]
-                if p_dst != p_src and self.etats[p_dst]["S"] > 1:
-                    seeds[p_dst] = seeds.get(p_dst, 0) + 1
+
+            # Propagation géographique (comme avant mais plafond relevé)
+            taux_voyage = self.cfg.vitesse_propagation / (500 * n_pays)
+            max_voyageurs = max(2, n_src * 0.00005)
+            voyageurs = min(rng.poisson(max(I_src * taux_voyage, 0.1)), max_voyageurs)
+            if voyageurs > 0:
+                poids = np.array([self.conn[p_src].get(p2, 0) for p2 in self.pays])
+                if poids.sum() > 0:
+                    poids /= poids.sum()
+                    destinations = rng.choice(len(self.pays), size=int(voyageurs), p=poids)
+                    for idx in destinations:
+                        p_dst = self.pays[idx]
+                        if p_dst != p_src and self.etats[p_dst]["S"] > 1:
+                            seeds[p_dst] = seeds.get(p_dst, 0) + 1
+
+            # Propagation de base globale: chaque pays infecté envoie
+            # un micro-flux vers TOUS les autres pays
+            flux_base = I_src * taux_base_global
+            if flux_base >= 0.01:
+                for p_dst in self.pays:
+                    if p_dst != p_src and self.etats[p_dst]["S"] > 1:
+                        seeds[p_dst] = seeds.get(p_dst, 0) + flux_base
 
         for p_dst, n_seed in seeds.items():
             s_dispo = self.etats[p_dst]["S"]
