@@ -174,7 +174,7 @@ def saisir_evenements(pays_valides):
             print(f" Evenement ajoute. ({len(evenements)} au total)")
     return evenements
 
-
+#CHARGÉ
 
 if __name__ == "__main__":
     print("Chargement de la population...")
