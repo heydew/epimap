@@ -20,7 +20,7 @@ def get_epi(p=None):
     df = df.rename(columns=colonnes)
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
 
-    #  pas de code ISO = pas un vrai pays
+    # enleve les agregats regionaux (pas de code ISO = pas un vrai pays)
     df = df[df["code"].notna() & (df["code"] != "")]
     return df.sort_values(["pays", "date"]).fillna(0)
 
@@ -31,7 +31,7 @@ def get_pop(p=None, codes=None):
     df = pd.read_csv(p)
 
     df.columns = [c.lower().strip() for c in df.columns]
-
+    # FIXE: "country name" → "pays" pour que le merge dans main.py fonctionne
     df = df.rename(columns={"country name": "pays", "country code": "code", "value": "pop"})
 
     if codes:
@@ -39,11 +39,24 @@ def get_pop(p=None, codes=None):
 
     # derniere annee dispo par pays
     df = df.sort_values("year").groupby("code").last().reset_index()
+
+    # deduplication par nom de pays (un pays peut avoir plusieurs codes)
+    df = df.sort_values("pop", ascending=False).groupby("pays").first().reset_index()
+
+    df["pop"] = pd.to_numeric(df["pop"], errors="coerce").fillna(0)
+
+    # certains CSV stockent la pop en milliers -> normaliser si max < 10_000
+    if df["pop"].max() < 10_000:
+        df["pop"] = df["pop"] * 1_000
+
     return df[["pays", "code", "pop"]]
 
 
 def run_sir(df, g=0.1):
-
+    """
+    Reconstruit S/I/R depuis les données cumulatives réelles.
+    g = taux de guérison journalier (défaut 0.1 = 10 jours de contagiosité)
+    """
     resultats = []
     for pays, groupe in df.groupby("pays"):
         groupe = groupe.sort_values("date").copy()
@@ -63,7 +76,7 @@ def run_sir(df, g=0.1):
         for k in range(1, len(groupe)):
             gueris = g * infectes[k - 1]
             infectes[k] = max(0.0, infectes[k - 1] + nouveaux[k] - gueris)
-            # max a R à N-I pour conserver la pop
+            # cap R à N-I pour conserver la masse
             retablis[k] = min(retablis[k - 1] + gueris, nb_pop - infectes[k])
 
         groupe["I"] = infectes

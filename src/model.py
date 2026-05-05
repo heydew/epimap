@@ -1,3 +1,8 @@
+"""
+model.py — Moteur de simulation épidémiologique SEIRD+V
+Compartiments: S -> E -> I -> R + D (Décès) + V (Vaccinés)
+"""
+
 import math
 import json
 import numpy as np
@@ -6,9 +11,14 @@ from dataclasses import dataclass
 from typing import Optional, Dict, Tuple
 
 
+HUBS_AERIENS = {
+    "United States of America", "China", "United Kingdom", "Germany", "France",
+    "United Arab Emirates", "Singapore", "Japan", "Netherlands", "Turkey"
+}
+
 
 def haversine(c1: Tuple[float, float], c2: Tuple[float, float]) -> float:
-
+    """Distance en km entre deux coordonnées (lat, lon)."""
     R = 6371
     lat1, lon1 = math.radians(c1[0]), math.radians(c1[1])
     lat2, lon2 = math.radians(c2[0]), math.radians(c2[1])
@@ -19,7 +29,7 @@ def haversine(c1: Tuple[float, float], c2: Tuple[float, float]) -> float:
 
 
 def _extraire_coords(geom: dict) -> list:
-
+    """Extrait toutes les coordonnées d'une géométrie GeoJSON."""
     t = geom.get("type", "")
     if t == "Polygon":
         return geom["coordinates"][0]
@@ -32,7 +42,7 @@ def _extraire_coords(geom: dict) -> list:
 
 
 def lire_centroides_geojson(geojson_path: str) -> Dict[str, Tuple[float, float]]:
-
+    """Retourne {nom_pays: (lat, lon)} depuis le GeoJSON."""
     with open(geojson_path, "r", encoding="utf-8") as f:
         geo = json.load(f)
 
@@ -51,7 +61,7 @@ def lire_centroides_geojson(geojson_path: str) -> Dict[str, Tuple[float, float]]
 
 @dataclass
 class ConfigMaladie:
-
+    """Paramètres de la maladie définis par l'utilisateur."""
     nom: str
     r0: float
     jours_incubation: float
@@ -65,7 +75,7 @@ class ConfigMaladie:
 
 
 class MoteurSEIRDV:
-
+    """Simule une épidémie SEIRD+V sur tous les pays."""
 
     def __init__(self, config: ConfigMaladie, population_df: pd.DataFrame, geojson_path: str):
         self.cfg = config
@@ -94,9 +104,11 @@ class MoteurSEIRDV:
                 coord2 = self.centroides.get(p2)
                 if coord1 and coord2:
                     dist = haversine(coord1, coord2)
-                    self.conn[p1][p2] = math.exp(-dist / 5000)
+                    score_geo = math.exp(-dist / 5000)
                 else:
-                    self.conn[p1][p2] = 0.01
+                    score_geo = 0.01
+                bonus_hub = 2.5 if (p1 in HUBS_AERIENS or p2 in HUBS_AERIENS) else 1.0
+                self.conn[p1][p2] = score_geo * bonus_hub
 
         for p1 in self.pays:
             total = sum(self.conn[p1].values())
@@ -125,8 +137,7 @@ class MoteurSEIRDV:
         if self.cfg.saisonnalite > 0:
             facteur = 1 + self.cfg.saisonnalite * math.sin(2 * math.pi * date.day_of_year / 365)
             base *= facteur
-
-        return min(base, 0.99)
+        return base
 
     def _etape_pays(self, pays: str, date: pd.Timestamp) -> Dict[str, float]:
         st = self.etats[pays]
@@ -135,86 +146,58 @@ class MoteurSEIRDV:
             return st
 
         S, E, I, R, D, V = st["S"], st["E"], st["I"], st["R"], st["D"], st["V"]
+
+        # securite: recapiter avant de calculer (au cas ou propagation aurait depasse N)
+        total = S + E + I + R + D + V
+        if total > n and total > 0:
+            facteur = n / total
+            S *= facteur; E *= facteur; I *= facteur
+            R *= facteur; D *= facteur; V *= facteur
+
         beta = self._get_beta(pays, date)
 
-#vaccination
-        nb_sous_pas = max(1, math.ceil(max(beta, self.sigma, self.gamma) / 0.25))
-        dt = 1.0 / nb_sous_pas
+        nouveaux_exposes  = min(beta * S * I / n, S)
+        nouveaux_infectes = min(self.sigma * E, E)
+        nouveaux_retablis = min(self.gamma * (1 - self.cfg.taux_mortalite) * I, I)
+        nouveaux_deces    = min(self.gamma * self.cfg.taux_mortalite * I, I - nouveaux_retablis)
+        nouveaux_vaccines = min(self.taux_vaccination[pays] * S, max(S - nouveaux_exposes, 0))
 
-        taux_vax = self.taux_vaccination[pays]
+        new_E = max(E + nouveaux_exposes - nouveaux_infectes, 0)
+        new_I = max(I + nouveaux_infectes - nouveaux_retablis - nouveaux_deces, 0)
+        new_R = max(R + nouveaux_retablis, 0)
+        new_D = max(D + nouveaux_deces, 0)
+        new_V = max(V + nouveaux_vaccines, 0)
+        # S derive de la conservation stricte: evite toute accumulation de masse
+        new_S = max(n - new_E - new_I - new_R - new_D - new_V, 0)
 
-        for _ in range(nb_sous_pas):
-            # S
-            exp_brut = beta * S * I / n * dt
-            vax_brut = taux_vax * S * dt
-            total_sortie_S = exp_brut + vax_brut
-            if total_sortie_S > S and total_sortie_S > 0:
-                facteur = S / total_sortie_S
-                exp_brut *= facteur
-                vax_brut *= facteur
-
-            #E
-            inf_brut = self.sigma * E * dt
-            inf_brut = min(inf_brut, E)
-
-            # I
-            ret_brut = self.gamma * (1 - self.cfg.taux_mortalite) * I * dt
-            dec_brut = self.gamma * self.cfg.taux_mortalite * I * dt
-            total_sortie_I = ret_brut + dec_brut
-            if total_sortie_I > I and total_sortie_I > 0:
-                fi = I / total_sortie_I
-                ret_brut *= fi
-                dec_brut *= fi
-
-            S = max(S - exp_brut - vax_brut, 0)
-            E = max(E + exp_brut - inf_brut, 0)
-            I = max(I + inf_brut - ret_brut - dec_brut, 0)
-            R = max(R + ret_brut, 0)
-            D = max(D + dec_brut, 0)
-            V = max(V + vax_brut, 0)
-
-        # S+E+I+R+V = pop - D
-        pop_vivante = S + E + I + R + V
-        pop_cible   = max(n - D, 0)
-        if pop_vivante > 0 and abs(pop_vivante - pop_cible) > 0.5:
-            S = max(S + (pop_cible - pop_vivante), 0)
-
-        return {"S": S, "E": E, "I": I, "R": R, "D": D, "V": V, "pop": n}
+        return {
+            "S": new_S, "E": new_E, "I": new_I,
+            "R": new_R, "D": new_D, "V": new_V, "pop": n
+        }
 
     def _propager_entre_pays(self, rng: np.random.Generator):
-        #compter combien partent
-        seeds: Dict[str, float] = {}   # = total arrivant dans pays dst
-
+        seeds: Dict[str, float] = {}
+        n_pays = max(len(self.pays), 1)
         for p_src in self.pays:
             I_src = self.etats[p_src]["I"]
-            pop_src = self.etats[p_src]["pop"]
-            if I_src < 1 or pop_src <= 0:
+            if I_src < 1:
                 continue
-
-            taux_voyage = self.cfg.vitesse_propagation * 1e-5
-            lambda_voyage = pop_src * taux_voyage * (I_src / pop_src)
-            voyageurs = int(rng.poisson(lambda_voyage))
+            n_src = self.etats[p_src]["pop"]
+            # taux divise par n_pays: propagation totale constante peu importe le nb de pays
+            taux_voyage = self.cfg.vitesse_propagation / (1000 * n_pays)
+            max_voyageurs = max(1, n_src * 0.00001)
+            voyageurs = min(rng.poisson(I_src * taux_voyage), max_voyageurs)
             if voyageurs == 0:
                 continue
-            # calma calma
-            voyageurs = min(voyageurs, int(I_src))
-
             poids = np.array([self.conn[p_src].get(p2, 0) for p2 in self.pays])
             if poids.sum() == 0:
                 continue
             poids /= poids.sum()
-            destinations = rng.choice(len(self.pays), size=voyageurs, p=poids)
-
-            partis = 0
+            destinations = rng.choice(len(self.pays), size=int(voyageurs), p=poids)
             for idx in destinations:
                 p_dst = self.pays[idx]
-                if p_dst != p_src:
+                if p_dst != p_src and self.etats[p_dst]["S"] > 1:
                     seeds[p_dst] = seeds.get(p_dst, 0) + 1
-                    partis += 1
-
-            # elever infectés
-            if partis > 0:
-                self.etats[p_src]["I"] = max(self.etats[p_src]["I"] - partis, 0)
 
         for p_dst, n_seed in seeds.items():
             s_dispo = self.etats[p_dst]["S"]
@@ -225,14 +208,34 @@ class MoteurSEIRDV:
             self.etats[p_dst]["E"] += seed
 
     def simuler(self, plage_dates: pd.DatetimeIndex, evenements: list, graine: int = 42) -> pd.DataFrame:
-
+        """Lance la simulation. Retourne un DataFrame (country, date, S, E, I, R, D, V, population)."""
         rng = np.random.default_rng(graine)
         date_debut = pd.Timestamp(self.cfg.date_debut)
         resultats = []
 
+        pop_mondiale = sum(self.etats[p]["pop"] for p in self.pays)
+        if pop_mondiale > 15_000_000_000:
+            # probablement des doublons ou mauvaise unite -> normaliser
+            facteur = 8_000_000_000 / pop_mondiale
+            for p in self.pays:
+                n = self.etats[p]["pop"] * facteur
+                self.etats[p]["pop"] = n
+                self.etats[p]["S"] = n
+                self.etats[p]["I"] = 0.0
+                self.etats[p]["E"] = 0.0
+            # reinitialiser infectes initiaux
+            if self.cfg.pays_origine in self.etats:
+                n = self.etats[self.cfg.pays_origine]["pop"]
+                i0 = min(self.cfg.infectes_initiaux, n)
+                self.etats[self.cfg.pays_origine]["I"] = i0
+                self.etats[self.cfg.pays_origine]["S"] = n - i0
+
         for date in plage_dates:
             for ev in evenements:
                 ev.appliquer(date, self)
+
+            if date >= date_debut:
+                self._propager_entre_pays(rng)
 
             nouveaux_etats = {}
             for pays in self.pays:
@@ -241,9 +244,6 @@ class MoteurSEIRDV:
                 else:
                     nouveaux_etats[pays] = self._etape_pays(pays, date)
             self.etats = nouveaux_etats
-
-            if date >= date_debut:
-                self._propager_entre_pays(rng)
 
             for pays in self.pays:
                 st = self.etats[pays]

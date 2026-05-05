@@ -1,7 +1,6 @@
 
 
-# pas fini, decommente pour lancer
-"""import pandas as pd
+import pandas as pd
 from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
