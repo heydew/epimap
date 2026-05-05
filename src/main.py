@@ -14,7 +14,7 @@ if __name__ == "__main__":
     donnees_epi = get_epi()
     donnees_pop = get_pop(codes=set(donnees_epi["code"].unique()))
 
-    # merge sur "code" (ISO)
+    # merge sur code ISO
     df = donnees_epi.merge(donnees_pop[["code", "pop"]], on="code").dropna(subset=["pop"])
     df = df.rename(columns={"pop": "population"})
 

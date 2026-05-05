@@ -1,133 +1,132 @@
-
-
 import pandas as pd
 from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from model import MoteurSEIRDV
+    from model import Simulation
 
 
-class Evenement:
-
-
-    def __init__(self, date: str, pays: Optional[str] = None):
-        self.date_declenchement = pd.Timestamp(date)
+class Event:
+    def __init__(self, date, pays=None):
+        self.date_trigger = pd.Timestamp(date)
         self.pays = pays
-        self._declenche = False
+        self.declenche = False
 
 
-    def _cibles(self, moteur: "MoteurSEIRDV") -> list:
+    def cibles(self, sim):
         if self.pays:
-            return [self.pays] if self.pays in moteur.pays else []
-        return moteur.pays
+            return [self.pays] if self.pays in sim.pays else []
+        return sim.pays
 
-    def appliquer(self, date_courante: pd.Timestamp, moteur: "MoteurSEIRDV"):
-        if not self._declenche and date_courante >= self.date_declenchement:
-            self._declencher(moteur)
-            self._declenche = True
+    def appliquer(self, date, sim):
+        if not self.declenche and date >= self.date_trigger:
+            self.trigger(sim)
+            self.declenche = True
 
-    def _declencher(self, moteur: "MoteurSEIRDV"):
+    def trigger(self, sim):
         raise NotImplementedError
 
 
-class Confinement(Evenement):
 
 
-    def __init__(self, date: str, reduction: float, duree_jours: int, pays: Optional[str] = None):
+class Confinement(Event):
+
+    def __init__(self, date, reduction, duree_jours, pays=None):
         super().__init__(date, pays)
         self.reduction = reduction
-        self.duree_jours = duree_jours
+        self.duree = duree_jours
         self.date_fin = pd.Timestamp(date) + pd.Timedelta(days=duree_jours)
-        self._leve = False
+        self.leve = False
 
-    def appliquer(self, date_courante: pd.Timestamp, moteur: "MoteurSEIRDV"):
-        if not self._declenche and date_courante >= self.date_declenchement:
-            self._declencher(moteur)
-            self._declenche = True
-        if self._declenche and not self._leve and date_courante >= self.date_fin:
-            for p in self._cibles(moteur):
-                moteur.beta_override[p] = None
-            self._leve = True
-
-    def _declencher(self, moteur: "MoteurSEIRDV"):
-        beta_base = moteur.cfg.r0 * moteur.gamma
-        nouveau_beta = beta_base * (1 - self.reduction)
-        for p in self._cibles(moteur):
-            moteur.beta_override[p] = nouveau_beta
+    def appliquer(self, date, sim):
+        if not self.declenche and date >= self.date_trigger:
+            self.trigger(sim)
+            self.declenche = True
+        # remet beta à None quand c'est fini = retour à la normale
+        if self.declenche and not self.leve and date >= self.date_fin:
+            for p in self.cibles(sim):
+                sim.beta_override[p] = None
+            self.leve = True
 
 
-class Vaccination(Evenement):
+
+    def trigger(self, sim):
+        beta_base = sim.cfg.r0 * sim.gamma
+        for p in self.cibles(sim):
+            sim.beta_override[p] = beta_base * (1 - self.reduction)
 
 
-    def __init__(self, date: str, taux_quotidien: float, pays: Optional[str] = None):
+class Vaccination(Event):
+
+    def __init__(self, date, taux_quotidien, pays=None):
         super().__init__(date, pays)
-        self.taux_quotidien = taux_quotidien
+        self.taux = taux_quotidien
 
-    def _declencher(self, moteur: "MoteurSEIRDV"):
-        for p in self._cibles(moteur):
-            moteur.taux_vaccination[p] = self.taux_quotidien
-
-
-class NouveauVariant(Evenement):
+    def trigger(self, sim):
+        for p in self.cibles(sim):
+            sim.taux_vaccination[p] = self.taux
 
 
-    def __init__(self, date: str, nouveau_r0: Optional[float] = None,
-                 nouveau_ifr: Optional[float] = None, pays: Optional[str] = None):
+class NouveauVariant(Event):
+
+    def __init__(self, date, nouveau_r0=None, nouveau_ifr=None, pays=None):
         super().__init__(date, pays)
         self.nouveau_r0 = nouveau_r0
         self.nouveau_ifr = nouveau_ifr
 
-    def _declencher(self, moteur: "MoteurSEIRDV"):
+    def trigger(self, sim):
         if self.nouveau_r0 is not None:
-            moteur.cfg.r0 = self.nouveau_r0
-            for p in self._cibles(moteur):
-                moteur.beta_override[p] = None
+            sim.cfg.r0 = self.nouveau_r0
+            # reset les overrides sinon le nouveau r0 est ignoré là où il y avait un confinement
+            for p in self.cibles(sim):
+                sim.beta_override[p] = None
         if self.nouveau_ifr is not None:
-            moteur.cfg.taux_mortalite = self.nouveau_ifr
+            sim.cfg.taux_mortalite = self.nouveau_ifr
 
 
-class MesuresSanitaires(Evenement):
+class MesuresSanitaires(Event):
+    # comme confinement mais permanent=pas de date de fin
 
-
-    def __init__(self, date: str, reduction: float, pays: Optional[str] = None):
+    def __init__(self, date, reduction, pays=None):
         super().__init__(date, pays)
         self.reduction = reduction
 
-    def _declencher(self, moteur: "MoteurSEIRDV"):
-        beta_base = moteur.cfg.r0 * moteur.gamma
-        for p in self._cibles(moteur):
-            moteur.beta_override[p] = beta_base * (1 - self.reduction)
+    def trigger(self, sim):
+        beta_base = sim.cfg.r0 * sim.gamma
+        for p in self.cibles(sim):
+            sim.beta_override[p] = beta_base * (1 - self.reduction)
 
 
-class LeveeRestrictions(Evenement):
+class LeveeRestrictions(Event):
 
-
-    def __init__(self, date: str, pays: Optional[str] = None):
+    def __init__(self, date, pays=None):
         super().__init__(date, pays)
 
-    def _declencher(self, moteur: "MoteurSEIRDV"):
-        for p in self._cibles(moteur):
-            moteur.beta_override[p] = None
+    def trigger(self, sim):
+        for p in self.cibles(sim):
+            sim.beta_override[p] = None
 
 
-class FermetureFrontieres(Evenement):
+class FermetureFrontieres(Event):
 
-
-    def __init__(self, date: str, duree_jours: int, pays: Optional[str] = None):
+    def __init__(self, date, duree_jours, pays=None):
         super().__init__(date, pays)
-        self.duree_jours = duree_jours
+        self.duree = duree_jours
         self.date_fin = pd.Timestamp(date) + pd.Timedelta(days=duree_jours)
-        self._leve = False
-        self._vitesse_originale = None
+        self.leve = False
+        self.vitesse_orig = None  # sauvegarde la vitesse avant fermeture pour la remettre après
 
-    def appliquer(self, date_courante: pd.Timestamp, moteur: "MoteurSEIRDV"):
-        if not self._declenche and date_courante >= self.date_declenchement:
-            self._vitesse_originale = moteur.cfg.vitesse_propagation
-            moteur.cfg.vitesse_propagation *= 0.05
-            self._declenche = True
-        if self._declenche and not self._leve and date_courante >= self.date_fin:
-            moteur.cfg.vitesse_propagation = self._vitesse_originale
-            self._leve = True
+    def appliquer(self, date, sim):
+        if not self.declenche and date >= self.date_trigger:
+            self.vitesse_orig = sim.cfg.vitesse_propagation
+            sim.cfg.vitesse_propagation *= 0.05  # 95% de réduction des voyages
+            self.declenche = True
+        if self.declenche and not self.leve and date >= self.date_fin:
+            sim.cfg.vitesse_propagation = self.vitesse_orig
+            self.leve = True
 
-    def _declencher(self, moteur: "MoteurSEIRDV"):
+    def trigger(self, sim):
         pass
+
+
+# inshallah
+Evenement = Event

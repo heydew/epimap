@@ -1,89 +1,86 @@
 import pandas as pd
 import numpy as np
 
-DOSSIER_DATA = "../data"
-
+data_folder = "../data"
 
 def get_epi(p=None):
     if p is None:
-        p = DOSSIER_DATA + "/epidemie.csv"
+        p = data_folder + "/epidemie.csv"
     df = pd.read_csv(p)
 
-    colonnes = {"Entity": "pays", "Code": "code", "Day": "date"}
+    #code iso for the win
+    cols = {"Entity": "pays", "Code": "code", "Day": "date"}
     for c in df.columns:
-        minuscule = c.lower()
-        if "death" in minuscule and "cumulative" in minuscule:
-            colonnes[c] = "deces_cum"
-        if "cases" in minuscule and "cumulative" in minuscule:
-            colonnes[c] = "cas_cum"
+        low = c.lower()
+        if "death" in low and "cumulative" in low:
+            cols[c] = "deces_cum"
+        if "cases" in low and "cumulative" in low:
+            cols[c] = "cas_cum"
 
-    df = df.rename(columns=colonnes)
+    df = df.rename(columns=cols)
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
 
-    # enleve les agregats regionaux (pas de code ISO = pas un vrai pays)
+    # sans code iso = agrégats régionaux (genre "Europe"), on veut pas ça
     df = df[df["code"].notna() & (df["code"] != "")]
     return df.sort_values(["pays", "date"]).fillna(0)
 
 
 def get_pop(p=None, codes=None):
     if p is None:
-        p = DOSSIER_DATA + "/population.csv"
+        p = data_folder + "/population.csv"
     df = pd.read_csv(p)
 
     df.columns = [c.lower().strip() for c in df.columns]
-    # FIXE: "country name" → "pays" pour que le merge dans main.py fonctionne
     df = df.rename(columns={"country name": "pays", "country code": "code", "value": "pop"})
 
     if codes:
         df = df[df["code"].isin(codes)]
 
-    # derniere annee dispo par pays
+    # prend la dernière année dispo par pays
     df = df.sort_values("year").groupby("code").last().reset_index()
 
-    # deduplication par nom de pays (un pays peut avoir plusieurs codes)
+    # si un pays a plusieurs codes on garde le plus peuplé
     df = df.sort_values("pop", ascending=False).groupby("pays").first().reset_index()
 
     df["pop"] = pd.to_numeric(df["pop"], errors="coerce").fillna(0)
 
-    # certains CSV stockent la pop en milliers -> normaliser si max < 10_000
-    if df["pop"].max() < 10_000:
-        df["pop"] = df["pop"] * 1_000
-
     return df[["pays", "code", "pop"]]
 
 
-def run_sir(df, g=0.1):
-    """
-    Reconstruit S/I/R depuis les données cumulatives réelles.
-    g = taux de guérison journalier (défaut 0.1 = 10 jours de contagiosité)
-    """
-    resultats = []
-    for pays, groupe in df.groupby("pays"):
-        groupe = groupe.sort_values("date").copy()
-        nb_pop = float(groupe["population"].iloc[0])
-        if nb_pop <= 0:
+def calc_sir(df, g=0.1):
+    # repart des cas cumulés pour refaire I et R
+    # g=0.1 = environ 10 jours de maladie, semble ok pour covid
+
+    out = []
+    for pays, grp in df.groupby("pays"):
+        grp = grp.sort_values("date").copy()
+        N = float(grp["population"].iloc[0])
+        if N <= 0:
             continue
 
-        cas_cumules = groupe["cas_cum"].values.astype(float)
-        nouveaux = np.diff(cas_cumules, prepend=cas_cumules[0])
-        nouveaux = np.clip(nouveaux, 0, None)  # jamais negatif
+        cum = grp["cas_cum"].values.astype(float)
+        nouveaux = np.diff(cum, prepend=cum[0])
+        nouveaux = np.clip(nouveaux, 0, None)  # corrections négatives -> on ignore
 
-        infectes = np.zeros(len(groupe))
-        retablis = np.zeros(len(groupe))
-        infectes[0] = cas_cumules[0]
-        retablis[0] = groupe["deces_cum"].iloc[0]
+        I = np.zeros(len(grp))
+        R = np.zeros(len(grp))
+        I[0] = cum[0]
+        R[0] = grp["deces_cum"].iloc[0]  # TODO: R devrait être guéris pas décès, mais on a pas les données
 
-        for k in range(1, len(groupe)):
-            gueris = g * infectes[k - 1]
-            infectes[k] = max(0.0, infectes[k - 1] + nouveaux[k] - gueris)
-            # cap R à N-I pour conserver la masse
-            retablis[k] = min(retablis[k - 1] + gueris, nb_pop - infectes[k])
+        for k in range(1, len(grp)):
+            gueris = g * I[k-1]
+            I[k] = max(0.0, I[k-1] + nouveaux[k] - gueris)
+            R[k] = min(R[k-1] + gueris, N - I[k])
 
-        groupe["I"] = infectes
-        groupe["R"] = retablis
-        groupe["S"] = np.clip(nb_pop - infectes - retablis, 0, nb_pop)
-        resultats.append(groupe)
+        grp["I"] = I
+        grp["R"] = R
+        grp["S"] = np.clip(N - I - R, 0, N)
+        out.append(grp)
 
-    if not resultats:
+    if not out:
         return pd.DataFrame()
-    return pd.concat(resultats, ignore_index=True)
+    return pd.concat(out, ignore_index=True)
+
+
+# flemme de changer partout
+run_sir = calc_sir

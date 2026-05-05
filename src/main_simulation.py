@@ -1,7 +1,5 @@
 import pandas as pd
 from pathlib import Path
-
-# Importations locales
 from io_data import get_pop
 from model import ConfigMaladie, MoteurSEIRDV
 from scenarios import (
@@ -11,13 +9,13 @@ from scenarios import (
 import viz_curves
 import viz_map
 
-# Configuration des chemins pour le out
 OUT = Path(__file__).resolve().parents[1] / "out"
 OUT.mkdir(exist_ok=True)
 GEO = Path(__file__).resolve().parents[1] / "data" / "world-countries.geojson"
 POP = Path(__file__).resolve().parents[1] / "data" / "population.csv"
 
 
+#  saisie utilisateur
 
 def lire_str(prompt):
     return input(prompt).strip()
@@ -28,7 +26,7 @@ def lire_float(prompt):
         try:
             return float(input(prompt).strip())
         except ValueError:
-            print(" Entrez un nombre (ex: 2.5)")
+            print("nombre invalide, réessaie (ex: 2.5)")
 
 
 def lire_int(prompt):
@@ -36,7 +34,7 @@ def lire_int(prompt):
         try:
             return int(input(prompt).strip())
         except ValueError:
-            print(" Entrez un nombre entier.")
+            print("entier attendu")
 
 
 def lire_date(prompt):
@@ -46,7 +44,7 @@ def lire_date(prompt):
             pd.Timestamp(val)
             return val
         except Exception:
-            print(" Format attendu: YYYY-MM-DD")
+            print("format attendu: YYYY-MM-DD")
 
 
 def lire_oui_non(prompt):
@@ -63,28 +61,28 @@ def lire_pays_valide(prompt, pays_valides):
         val = input(prompt).strip()
         if val in pays_valides:
             return val
-        # Recherche du truc
+        # essaie en ignorant la casse
         match = next((p for p in pays_valides if p.lower() == val.lower()), None)
         if match:
             return match
-        print(f" Pays introuvable. Vérifie l'orthographe chef (ex: 'France', 'China')")
+        print(f"pays introuvable, vérifie l'orthographe (ex: 'France', 'China')")
 
 
-
+#maladie
 
 def saisir_maladie(pays_valides):
-    print("On crée maladie custom:")
+    print("config maladie custom:")
 
-    nom = lire_str("Nom de la maladie: ")
-    r0 = lire_float("R0: taux de reproduction(grippe=1.3 COVID=2.5,rougeole=15): ")
-    jours_incubation = lire_float("Durée d'incubation en jours (grippe=2, COVID=5, rougeole=10): ")
-    jours_contagieux = lire_float("Durée de contagiosité en jours (grippe=5, COVID=10, ebola=7): ")
-    taux_mortalite = lire_float("Taux de mortalité 0-1 (grippe=0.001, COVID=0.01, ebola=0.50): ")
-    pays_origine = lire_pays_valide("Pays d'origine:", pays_valides)
-    date_debut = lire_date("Date du premier infecté (YYYY-MM-DD): ")
-    date_fin = lire_date("Date de fin de simulation (YYYY-MM-DD): ")
-    infectes_initiaux = lire_int("Nombre d'infectés au départ (ex: 67): ")
-    vitesse_prop = lire_float("Vitesse de propagation internationale 0-1 (faible=0.1, normale=0.3, rapide=0.7): ")
+    nom = lire_str("nom: ")
+    r0 = lire_float("R0 (grippe=1.3, covid=2.5, rougeole=15): ")
+    jours_incubation = lire_float("incubation en jours (grippe=2, covid=5, rougeole=10): ")
+    jours_contagieux = lire_float("contagiosité en jours (grippe=5, covid=10, ebola=7): ")
+    taux_mortalite = lire_float("mortalité 0-1 (grippe=0.001, covid=0.01, ebola=0.50): ")
+    pays_origine = lire_pays_valide("pays d'origine: ", pays_valides)
+    date_debut = lire_date("date du premier infecté (YYYY-MM-DD): ")
+    date_fin = lire_date("date de fin de simulation (YYYY-MM-DD): ")
+    infectes_initiaux = lire_int("infectés au départ (ex: 67): ")
+    vitesse_prop = lire_float("vitesse propagation internationale 0-1 (lente=0.1, normale=0.3, rapide=0.7): ")
 
     config = ConfigMaladie(
         nom=nom,
@@ -101,54 +99,55 @@ def saisir_maladie(pays_valides):
     return config, date_fin
 
 
+# evenements
+
 TYPES_EVENEMENTS = {
-    "1":"Confinement",
-    "2":"Vaccination",
-    "3":"Nouveau variant",
-    "4":"Mesures sanitaires",
-    "5":"Levee des restrictions",
-    "6":"Fermeture des frontieres",
+    "1": "Confinement",
+    "2": "Vaccination",
+    "3": "Nouveau variant",
+    "4": "Mesures sanitaires",
+    "5": "Levée des restrictions",
+    "6": "Fermeture des frontières",
 }
 
 
 def saisir_pays_optionnel(pays_valides):
-    mondial = lire_oui_non("S'applique a tous les pays?")
-    if mondial:
+    if lire_oui_non("s'applique à tous les pays?"):
         return None
-    return lire_pays_valide("Pays cible: ", pays_valides)
+    return lire_pays_valide("pays cible: ", pays_valides)
 
 
 def saisir_evenement(pays_valides):
-    print("\n Types d'evenements:")
+    print("\névénements disponibles:")
     for k, v in TYPES_EVENEMENTS.items():
-        print(f" {k}. {v}")
-    choix = input(" Choix (1-6): ").strip()
+        print(f"  {k}. {v}")
+    choix = input("choix (1-6): ").strip()
 
-    date = lire_date(" Date de declenchement (YYYY-MM-DD): ")
+    date = lire_date("date de déclenchement (YYYY-MM-DD): ")
 
     if choix == "1":
-        reduction = lire_float(" Reduction de contagiosite 0-1 (ex: 0.6): ")
-        duree = lire_int(" Duree en jours: ")
+        reduction = lire_float("réduction de contagiosité 0-1 (ex: 0.6): ")
+        duree = lire_int("durée en jours: ")
         pays = saisir_pays_optionnel(pays_valides)
         return Confinement(date, reduction, duree, pays)
 
     elif choix == "2":
-        taux = lire_float(" Taux de vaccination quotidien 0-1: ")
+        taux = lire_float("taux de vaccination quotidien 0-1: ")
         pays = saisir_pays_optionnel(pays_valides)
         return Vaccination(date, taux, pays)
 
     elif choix == "3":
         nouveau_r0 = None
         nouveau_ifr = None
-        if lire_oui_non(" Modifier le R0?"):
-            nouveau_r0 = lire_float(" Nouveau R0: ")
-        if lire_oui_non(" Modifier le taux de mortalite?"):
-            nouveau_ifr = lire_float(" Nouveau taux de mortalite 0-1: ")
+        if lire_oui_non("modifier le R0?"):
+            nouveau_r0 = lire_float("nouveau R0: ")
+        if lire_oui_non("modifier le taux de mortalité?"):
+            nouveau_ifr = lire_float("nouveau taux de mortalité 0-1: ")
         pays = saisir_pays_optionnel(pays_valides)
         return NouveauVariant(date, nouveau_r0, nouveau_ifr, pays)
 
     elif choix == "4":
-        reduction = lire_float(" Reduction permanente de contagiosite 0-1: ")
+        reduction = lire_float("réduction permanente de contagiosité 0-1: ")
         pays = saisir_pays_optionnel(pays_valides)
         return MesuresSanitaires(date, reduction, pays)
 
@@ -157,67 +156,64 @@ def saisir_evenement(pays_valides):
         return LeveeRestrictions(date, pays)
 
     elif choix == "6":
-        duree = lire_int(" Duree de fermeture en jours: ")
+        duree = lire_int("durée de fermeture en jours: ")
         pays = saisir_pays_optionnel(pays_valides)
         return FermetureFrontieres(date, duree, pays)
 
+    # choix invalide, on retourne None, saisir_evenements() gère ça
     return None
 
 
 def saisir_evenements(pays_valides):
-    print(" Création d'evenements:")
-    evenements = []
-    while lire_oui_non(" Veux tu ajouter un evenement?"):
+    evs = []
+    while lire_oui_non("ajouter un événement?"):
         ev = saisir_evenement(pays_valides)
         if ev:
-            evenements.append(ev)
-            print(f" Evenement ajoute. ({len(evenements)} au total)")
-    return evenements
+            evs.append(ev)
+            print(f"ok, {len(evs)} événement(s) au total")
+    return evs
 
-#CHARGÉ
+
+#  main
 
 if __name__ == "__main__":
-    print("Chargement de la population...")
+    print("chargement population...")
     pop = get_pop(p=str(POP))
-    pop = pop[pop["pop"] > 100_000].copy()
+    pop = pop[pop["pop"] > 100_000].copy()  # ignore les mini pays c chiant
     pays_valides = set(pop["pays"].unique())
 
     from scenarios_predefinis import SCENARIOS
-    print("\nMode:")
-    print(" 0. Scenario personnalise")
+    print("\nquel scénario?")
+    print("  0. personnalisé")
     for k, (nom, _) in SCENARIOS.items():
-        print(f" {k}. {nom}")
-    choix = input("\nChoix: ").strip()
+        print(f"  {k}. {nom}")
+    choix = input("\nchoix: ").strip()
 
     if choix in SCENARIOS:
         _, fn = SCENARIOS[choix]
         maladie, date_fin, evenements = fn()
-        print(f"Scenario charge : {maladie.nom}")
+        print(f"scénario chargé: {maladie.nom}")
     else:
         maladie, date_fin = saisir_maladie(pays_valides)
         evenements = saisir_evenements(pays_valides)
 
-    #calcul duree
     plage = pd.date_range(start=maladie.date_debut, end=date_fin, freq="D")
-    print(f"\nSimulation {maladie.nom} — {len(pop)} pays, {len(plage)} jours")
+    print(f"\nlancement: {maladie.nom} — {len(pop)} pays, {len(plage)} jours")
 
-    # ca commence
     moteur = MoteurSEIRDV(maladie, pop, str(GEO))
     data = moteur.simuler(plage, evenements)
 
-    # regroupe donne monde
     world = data.groupby("date")[["S", "E", "I", "R", "D", "V"]].sum().reset_index()
 
-    print(f"Pic infectes: {world['I'].max():,.0f} personnes")
-    print(f"Deces totaux: {world['D'].iloc[-1]:,.0f}")
+    print(f"pic infectés : {world['I'].max():,.0f}")
+    print(f"décès totaux : {world['D'].iloc[-1]:,.0f}")
 
-    # Export
     f_courbes = str(OUT / "simulation_courbes.html")
     f_carte = str(OUT / "simulation_carte.html")
 
     viz_curves.tracer_seirdv(world, maladie.nom, f_courbes)
     viz_map.carte_simulation(data, str(GEO), f_carte, maladie.nom)
 
-    print("\nSimulation terminée. Ouverture des résultats:")
+    print("\nouverture des résultats...")
     viz_curves.out(f_courbes)
     viz_map.out(f_carte)
