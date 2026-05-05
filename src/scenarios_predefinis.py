@@ -13,7 +13,6 @@ def covid19():
         date_debut="2019-12-01",
         infectes_initiaux=67,
         vitesse_propagation=0.3,
-        saisonnalite=0.0,
     )
     date_fin = "2022-01-01"
     evenements = [
@@ -40,7 +39,6 @@ def h1n1():
         date_debut="2009-03-01",
         infectes_initiaux=100,
         vitesse_propagation=0.4,
-        saisonnalite=0.0,
     )
     date_fin = "2010-06-01"
     evenements = [
@@ -64,7 +62,6 @@ def ebola():
         date_debut="2014-02-01",
         infectes_initiaux=10,
         vitesse_propagation=0.05,
-        saisonnalite=0.0,
     )
     date_fin = "2016-01-01"
     evenements = [
