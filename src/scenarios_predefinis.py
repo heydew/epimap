@@ -14,15 +14,15 @@ def covid19():
         infectes_initiaux=67,
         vitesse_propagation=0.3,
     )
-    date_fin = "2022-01-01"
+    date_fin = "2024-01-01"
     evenements = [
         FermetureFrontieres("2020-01-23", duree_jours=90, pays="China"),
         Confinement("2020-03-15",       reduction=0.5, duree_jours=90),   # confinements europe/amérique
-        MesuresSanitaires("2020-06-15", reduction=0.62),                  # masques et tt après déconfinement
+        MesuresSanitaires("2020-06-15", reduction=0.5),                  # masques et tt après déconfinement
         Vaccination("2020-12-15",       taux_quotidien=0.008),
         LeveeRestrictions("2021-04-15"),                                  # assouplissement juste avant delta
-        NouveauVariant("2021-05-01",    nouveau_r0=3.5,                     echappement_immunitaire=0.003),  # delta
-        NouveauVariant("2021-11-15",    nouveau_r0=6.0, nouveau_ifr=0.002, echappement_immunitaire=0.003),  # omicron
+        NouveauVariant("2021-05-01",    nouveau_r0=5.0,                     echappement_immunitaire=0.3),  # delta
+        NouveauVariant("2021-11-15",    nouveau_r0=8.0, nouveau_ifr=0.002, echappement_immunitaire=0.3),  # omicron
     ]
     return config, date_fin, evenements
 
