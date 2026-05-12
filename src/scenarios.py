@@ -68,10 +68,11 @@ class Vaccination(Event):
 
 class NouveauVariant(Event):
 
-    def __init__(self, date, nouveau_r0=None, nouveau_ifr=None, pays=None):
+    def __init__(self, date, nouveau_r0=None, nouveau_ifr=None, echappement_immunitaire=0.0, pays=None):
         super().__init__(date, pays)
         self.nouveau_r0 = nouveau_r0
         self.nouveau_ifr = nouveau_ifr
+        self.echappement = echappement_immunitaire  # fraction des R qui redeviennent S
 
     def trigger(self, sim):
         if self.nouveau_r0 is not None:
@@ -81,6 +82,15 @@ class NouveauVariant(Event):
                 sim.beta_override[p] = None
         if self.nouveau_ifr is not None:
             sim.cfg.taux_mortalite = self.nouveau_ifr
+        if self.echappement > 0:
+            for p in self.cibles(sim):
+                r = sim.etats[p]["R"]
+                v = sim.etats[p]["V"]
+                transfert_r = r * self.echappement
+                transfert_v = v * self.echappement
+                sim.etats[p]["R"] -= transfert_r
+                sim.etats[p]["V"] -= transfert_v
+                sim.etats[p]["S"] += transfert_r + transfert_v
 
 
 class MesuresSanitaires(Event):

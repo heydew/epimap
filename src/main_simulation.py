@@ -18,7 +18,6 @@ OUT.mkdir(exist_ok=True)
 GEO = Path(__file__).resolve().parents[1] / "data" / "world-countries.geojson"
 POP = Path(__file__).resolve().parents[1] / "data" / "population.csv"
 
-# ─── helpers ────────────────────────────────────────────────────────────────
 
 def lbl(parent, text, row, col, **kw):
     tk.Label(parent, text=text, anchor="w", **kw).grid(row=row, column=col, sticky="w", padx=6, pady=3)
@@ -30,7 +29,7 @@ def slider(parent, var, from_, to, row, col, resolution=0.01):
     tk.Scale(parent, variable=var, from_=from_, to=to, orient="horizontal",
              resolution=resolution, length=220).grid(row=row, column=col, padx=6, pady=2, sticky="w")
 
-# ─── fenêtre événement ───────────────────────────────────────────────────────
+#événement
 
 class FenetreEvenement(tk.Toplevel):
     def __init__(self, parent, pays_valides, callback):
@@ -47,7 +46,7 @@ class FenetreEvenement(tk.Toplevel):
         f = tk.Frame(self, padx=12, pady=8)
         f.pack(fill="both", expand=True)
 
-        # type
+
         lbl(f, "Type :", 0, 0)
         self.type_var = tk.StringVar(value="Confinement")
         types = ["Confinement", "Vaccination", "Nouveau variant",
@@ -55,6 +54,7 @@ class FenetreEvenement(tk.Toplevel):
         cb = ttk.Combobox(f, textvariable=self.type_var, values=types, state="readonly", width=24)
         cb.grid(row=0, column=1, padx=6, pady=3, sticky="w")
         cb.bind("<<ComboboxSelected>>", lambda _: self._refresh_champs())
+
 
         # date
         lbl(f, "Date (YYYY-MM-DD) :", 1, 0)
@@ -67,6 +67,9 @@ class FenetreEvenement(tk.Toplevel):
         self.pays_cb = ttk.Combobox(f, textvariable=self.pays_var,
                                     values=[""] + self.pays_valides, width=22)
         self.pays_cb.grid(row=2, column=1, padx=6, pady=3, sticky="w")
+
+
+
 
         # cadre champs dynamiques
         self.champs_frame = tk.LabelFrame(f, text="Paramètres", padx=8, pady=6)
@@ -119,7 +122,7 @@ class FenetreEvenement(tk.Toplevel):
             self.duree_var = tk.IntVar(value=90)
             tk.Spinbox(cf, from_=1, to=730, textvariable=self.duree_var, width=8).grid(row=0, column=1, padx=6)
 
-        # Levée des restrictions : pas de paramètre supplémentaire
+        # ban les restrictions
 
     def _valider(self):
         date = self.date_var.get().strip()
@@ -161,7 +164,7 @@ class FenetreEvenement(tk.Toplevel):
         self.destroy()
 
 
-# ─── fenêtre principale ──────────────────────────────────────────────────────
+#interface de base
 
 class AppSimulation(tk.Tk):
     def __init__(self, pop, pays_valides):
@@ -198,7 +201,7 @@ class AppSimulation(tk.Tk):
                   bg="#27ae60", fg="white", font=("", 11, "bold"),
                   padx=16, pady=6).pack(side="right")
 
-    # ── onglet scénario ──────────────────────────────────────────────────────
+    #scénario
     def _build_scenario(self):
         f = self.tab_scenario
         tk.Label(f, text="Choisir un scénario prédéfini :", anchor="w",
@@ -213,7 +216,7 @@ class AppSimulation(tk.Tk):
             tk.Radiobutton(f, text=label, variable=self.scenario_var,
                            value=val, anchor="w").grid(row=i+1, column=0, sticky="w", pady=2)
 
-    # ── onglet maladie ───────────────────────────────────────────────────────
+    # maladie custom
     def _build_maladie(self):
         f = self.tab_maladie
 
@@ -252,7 +255,7 @@ class AppSimulation(tk.Tk):
                     row=row, column=1, padx=6, pady=3, sticky="w")
             self.vars[key] = v
 
-    # ── onglet événements ────────────────────────────────────────────────────
+    # événements
     def _build_evenements(self):
         f = self.tab_evs
 
@@ -284,7 +287,7 @@ class AppSimulation(tk.Tk):
         self.tree.delete(sel[0])
         self.evenements.pop(idx)
 
-    # ── lancer ──────────────────────────────────────────────────────────────
+    # lancer
     def _lancer(self):
         choix = self.scenario_var.get()
 

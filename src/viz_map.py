@@ -169,6 +169,7 @@ def _ecrire_carte_html(geo, map_data, dates_list, titre, out_file):
         function togglePlay() {{
             if (timer) {{ clearInterval(timer); timer = null; }}
             else {{
+                if (idx >= DATES.length - 1) {{ majCarte(0); }}
                 timer = setInterval(() => {{
                     if (idx >= DATES.length - 1) {{ clearInterval(timer); timer = null; return; }}
                     majCarte(idx + 1);
